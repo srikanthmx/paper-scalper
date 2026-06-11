@@ -38,10 +38,10 @@ class MomentumStrategy:
         snap = Snapshot(close=candle.close, atr=atr, vol_avg=vol_avg)
         self.snapshot = snap
 
+        # NB: 0.0 is a legitimate value (e.g. vol_avg in quiet hours) — only None means not warm
         if None in (atr, vol_avg, prior_high, prior_low):
             snap.rejects.append("warming_up")
             return None
-        assert atr and vol_avg and prior_high and prior_low
 
         px = candle.close
         atr_pct = atr / px * 100

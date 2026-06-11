@@ -183,9 +183,16 @@ async def run(feed_name: str, cfg: Settings) -> None:
     log.info("paper trading %s | lanes=%s candle=%ss fee=%.0fbps slip=%.0fbps equity=%.2f/lane",
              cfg.symbol, [l.name for l in engine.lanes], cfg.candle_seconds, cfg.fee_bps,
              cfg.slippage_bps, cfg.starting_equity)
+    errors = 0
     try:
         async for event in feed.stream():
-            engine.on_event(event)
+            try:
+                engine.on_event(event)
+            except Exception:  # noqa: BLE001 — a processing bug must not end the run
+                errors += 1
+                log.exception("engine error on %r (%d so far) — event skipped", event, errors)
+                if errors >= 100:
+                    raise
     finally:
         journal.set_state("live", {"ts": time.time(), "stopped": True})
         journal.close()

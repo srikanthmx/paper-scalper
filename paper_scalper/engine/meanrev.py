@@ -32,10 +32,10 @@ class MeanReversionStrategy:
         snap = Snapshot(close=candle.close, vwap=vwap, rsi=rsi, atr=atr)
         self.snapshot = snap
 
+        # NB: 0.0 is a legitimate value — only None means not warm
         if None in (vwap, rsi, atr):
             snap.rejects.append("warming_up")
             return None
-        assert vwap and rsi is not None and atr
 
         px = candle.close
         atr_pct = atr / px * 100

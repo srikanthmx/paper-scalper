@@ -95,12 +95,19 @@ class ATR:
 
 
 class SessionVWAP:
-    """VWAP anchored to UTC midnight (crypto session). Resets when the UTC day changes."""
+    """VWAP anchored to UTC midnight (crypto session). Resets when the UTC day changes.
+
+    On zero-volume stretches (quote-built candles on thin venues) it falls back to
+    the running mean of typical prices, so it always yields a value once any candle
+    has closed.
+    """
 
     def __init__(self) -> None:
         self.value: float | None = None
         self._pv = 0.0
         self._vol = 0.0
+        self._typ_sum = 0.0
+        self._typ_n = 0
         self._day: int | None = None
 
     def update(self, candle: Candle) -> float | None:
@@ -109,10 +116,13 @@ class SessionVWAP:
             self._day = day
             self._pv = 0.0
             self._vol = 0.0
+            self._typ_sum = 0.0
+            self._typ_n = 0
         self._pv += candle.notional if candle.notional > 0 else candle.typical * candle.volume
         self._vol += candle.volume
-        if self._vol > 0:
-            self.value = self._pv / self._vol
+        self._typ_sum += candle.typical
+        self._typ_n += 1
+        self.value = self._pv / self._vol if self._vol > 0 else self._typ_sum / self._typ_n
         return self.value
 
 

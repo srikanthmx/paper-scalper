@@ -63,6 +63,24 @@ def test_journal_separates_strategies(tmp_path) -> None:
     journal.close()
 
 
+def test_zero_volume_candles_do_not_crash_any_strategy() -> None:
+    """Regression: quote-only candles give vol_avg == 0.0, which is falsy but warm.
+
+    The live runner crashed on `assert ... and vol_avg` after ~20 quiet-hour
+    candles. Every strategy must treat 0.0 as a value, not as 'warming up'.
+    """
+    from paper_scalper.engine.strategy import Strategy
+
+    settings = cfg()
+    for strategy in (Strategy(settings), MomentumStrategy(settings),
+                     MeanReversionStrategy(settings)):
+        ts, px = 1_700_000_000.0, 100.0
+        for i in range(40):  # plenty past warm-up, all zero volume
+            strategy.on_candle(candle(ts + i * 60, px, px + 0.05, vol=0.0), None)
+            px += 0.05
+        assert "warming_up" not in strategy.snapshot.rejects
+
+
 def test_lanes_trade_independently(tmp_path) -> None:
     """One lane's halt must not block another lane."""
     from paper_scalper.engine.risk import RiskManager

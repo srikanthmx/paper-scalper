@@ -78,10 +78,10 @@ class Strategy:
                         rsi=rsi, atr=atr, vol_avg=vol_avg)
         self.snapshot = snap
 
+        # NB: values like vol_avg can legitimately be 0.0 — only None means not warm
         if None in (vwap, ema_f, ema_s, rsi, atr, vol_avg) or prev is None:
             snap.rejects.append("warming_up")
             return None
-        assert vwap and ema_f and ema_s and rsi is not None and atr and vol_avg
 
         px = candle.close
         atr_pct = atr / px * 100
