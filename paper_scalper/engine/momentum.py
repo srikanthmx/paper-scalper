@@ -51,7 +51,7 @@ class MomentumStrategy:
         if not (cfg.min_atr_pct <= atr_pct <= cfg.max_atr_pct):
             snap.rejects.append(f"atr {atr_pct:.3f}% outside band")
             return None
-        if candle.volume < cfg.momo_vol_mult * vol_avg:
+        if vol_avg <= 0 or candle.volume < cfg.momo_vol_mult * vol_avg:
             snap.rejects.append("no volume confirmation")
             return None
 

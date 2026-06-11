@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from paper_scalper.data.normalizer import Trade
+from paper_scalper.data.normalizer import Quote, Trade
 
 
 @dataclass(slots=True)
@@ -21,30 +21,40 @@ class Candle:
 
 
 class CandleBuilder:
-    """Buckets trades into fixed-interval candles. Emits a candle when a trade
-    arrives in a later bucket (gaps simply produce no candles — no synthetic fills)."""
+    """Buckets price events into fixed-interval candles.
+
+    Both trades and quote mids advance OHLC and close buckets — on thin venues
+    (Alpaca BTC/USD) trades can be minutes apart, and indicators need a steady
+    candle clock. Volume comes from trades only; quotes contribute zero volume.
+    """
 
     def __init__(self, seconds: int) -> None:
         self.seconds = seconds
         self._current: Candle | None = None
 
     def on_trade(self, trade: Trade) -> Candle | None:
-        bucket = trade.ts - (trade.ts % self.seconds)
+        return self._on_price(trade.ts, trade.price, trade.size)
+
+    def on_quote(self, quote: Quote) -> Candle | None:
+        return self._on_price(quote.ts, quote.mid, 0.0)
+
+    def _on_price(self, ts: float, price: float, size: float) -> Candle | None:
+        bucket = ts - (ts % self.seconds)
         completed: Candle | None = None
         cur = self._current
         if cur is None or bucket > cur.ts_open:
             completed = cur
             self._current = Candle(
-                ts_open=bucket, open=trade.price, high=trade.price, low=trade.price,
-                close=trade.price, volume=trade.size, notional=trade.price * trade.size,
+                ts_open=bucket, open=price, high=price, low=price,
+                close=price, volume=size, notional=price * size,
             )
         elif bucket == cur.ts_open:
-            cur.high = max(cur.high, trade.price)
-            cur.low = min(cur.low, trade.price)
-            cur.close = trade.price
-            cur.volume += trade.size
-            cur.notional += trade.price * trade.size
-        # trades older than the current bucket are dropped (out-of-order tick)
+            cur.high = max(cur.high, price)
+            cur.low = min(cur.low, price)
+            cur.close = price
+            cur.volume += size
+            cur.notional += price * size
+        # events older than the current bucket are dropped (out-of-order tick)
         return completed
 
     def flush(self) -> Candle | None:

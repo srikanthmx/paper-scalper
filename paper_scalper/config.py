@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     rsi_long_max: float = 75.0       # production: 65
     rsi_short_min: float = 25.0      # production: 35
     rsi_short_max: float = 60.0      # production: 55
-    max_spread_bps: float = 5.0
+    max_spread_bps: float = 20.0    # Alpaca BTC/USD spread is structurally 6-12bps (production: 5)
     ema_sep_min_bps: float = 1.0     # production: 2.0
     pullback_tolerance_pct: float = 0.10  # how close price must come to EMA9 to count as pullback
     min_atr_pct: float = 0.015       # production: 0.03

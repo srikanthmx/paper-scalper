@@ -71,10 +71,11 @@ class Engine:
                 closed = lane.broker.on_quote(event)
                 if closed is not None:
                     self._handle_close(lane, closed)
+            completed = self.candles.on_quote(event)
         else:
             completed = self.candles.on_trade(event)
-            if completed is not None:
-                self._on_candle_closed(completed)
+        if completed is not None:
+            self._on_candle_closed(completed)
         self._publish_state(event.ts)
 
     def _on_candle_closed(self, candle: Candle) -> None:

@@ -11,3 +11,8 @@
 2026-06-11 00:15:25,860 INFO paper_scalper.data.alpaca_crypto_feed: alpaca: {'T': 'success', 'msg': 'connected'}
 2026-06-11 00:15:25,902 INFO paper_scalper.data.alpaca_crypto_feed: alpaca: {'T': 'success', 'msg': 'authenticated'}
 2026-06-11 00:15:25,902 INFO paper_scalper.data.alpaca_crypto_feed: alpaca: {'T': 'subscription', 'trades': ['BTC/USD'], 'quotes': ['BTC/USD'], 'orderbooks': [], 'bars': [], 'updatedBars': [], 'dailyBars': []}
+2026-06-11 06:19:53,492 INFO paper_scalper: paper trading BTC/USD | lanes=['pullback', 'momo', 'meanrev'] candle=60s fee=25bps slip=3bps equity=10000.00/lane
+2026-06-11 06:19:53,678 INFO paper_scalper.data.alpaca_crypto_feed: subscribed to ['BTC/USD'] on stream.data.alpaca.markets
+2026-06-11 06:19:53,678 INFO paper_scalper.data.alpaca_crypto_feed: alpaca: {'T': 'success', 'msg': 'connected'}
+2026-06-11 06:19:53,720 INFO paper_scalper.data.alpaca_crypto_feed: alpaca: {'T': 'success', 'msg': 'authenticated'}
+2026-06-11 06:19:53,721 INFO paper_scalper.data.alpaca_crypto_feed: alpaca: {'T': 'subscription', 'trades': ['BTC/USD'], 'quotes': ['BTC/USD'], 'orderbooks': [], 'bars': [], 'updatedBars': [], 'dailyBars': []}

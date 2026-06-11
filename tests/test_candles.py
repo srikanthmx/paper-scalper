@@ -30,6 +30,22 @@ def test_gap_emits_only_real_candles() -> None:
     assert builder.flush().ts_open == 300
 
 
+def test_quotes_advance_and_close_buckets_without_volume() -> None:
+    from paper_scalper.data.normalizer import Quote
+
+    def quote(ts: float, mid: float) -> Quote:
+        return Quote(ts=ts, symbol="BTC/USD", bid=mid - 0.5, ask=mid + 0.5,
+                     bid_size=1, ask_size=1)
+
+    builder = CandleBuilder(60)
+    builder.on_trade(trade(0, 100, 2.0))
+    assert builder.on_quote(quote(30, 106)) is None   # extends high, no volume
+    completed = builder.on_quote(quote(61, 99))       # next bucket closes on a quote
+    assert completed is not None
+    assert (completed.high, completed.close, completed.volume) == (106, 106, 2.0)
+    assert builder.flush().volume == 0.0              # quote-only candle has zero volume
+
+
 def test_out_of_order_tick_dropped() -> None:
     builder = CandleBuilder(60)
     builder.on_trade(trade(120, 100))
