@@ -1,0 +1,33 @@
+[project]
+name = "paper-scalper"
+version = "0.1.0"
+description = "Paper-only scalping simulator: Alpaca crypto data (BTC/USD) now, Upstox equity ticks later. No real orders, ever."
+requires-python = ">=3.12"
+dependencies = [
+    "websockets>=12.0",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.2",
+    "fastapi>=0.111",
+    "uvicorn>=0.29",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["paper_scalper"]

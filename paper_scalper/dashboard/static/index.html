@@ -1,0 +1,425 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Paper Scalper</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lightweight-charts@4.2.3/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+:root {
+  --bg: #07090d;
+  --panel: #0d1117;
+  --panel-2: #11161f;
+  --border: #1b2230;
+  --border-soft: #161c28;
+  --text: #e6edf3;
+  --muted: #7d8590;
+  --faint: #4d5566;
+  --green: #2ee6a8;
+  --green-dim: rgba(46,230,168,.12);
+  --red: #ff5c7a;
+  --red-dim: rgba(255,92,122,.12);
+  --accent: #6ea8ff;
+  --accent-2: #9d7bff;
+  --amber: #ffc857;
+  --mono: "JetBrains Mono", ui-monospace, monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  background:
+    radial-gradient(1200px 500px at 80% -10%, rgba(110,168,255,.07), transparent 60%),
+    radial-gradient(900px 400px at 10% -10%, rgba(157,123,255,.06), transparent 60%),
+    var(--bg);
+  color: var(--text);
+  font-family: Inter, -apple-system, sans-serif;
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.up { color: var(--green); } .down { color: var(--red); } .flat { color: var(--muted); }
+
+/* ───── top bar ───── */
+header {
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 24px; border-bottom: 1px solid var(--border-soft);
+  position: sticky; top: 0; backdrop-filter: blur(12px);
+  background: rgba(7,9,13,.78); z-index: 50;
+}
+.logo {
+  width: 30px; height: 30px; border-radius: 9px; flex: none;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  display: grid; place-items: center; font-weight: 800; font-size: 14px; color: #07090d;
+}
+h1 { font-size: 15px; font-weight: 700; letter-spacing: -.01em; }
+.badge {
+  font-size: 10.5px; font-weight: 700; letter-spacing: .08em; padding: 4px 9px;
+  border-radius: 999px; border: 1px solid; text-transform: uppercase;
+}
+.badge.paper { color: var(--amber); border-color: rgba(255,200,87,.35); background: rgba(255,200,87,.08); }
+.symbol { font-family: var(--mono); font-weight: 600; color: var(--muted); font-size: 13px; }
+.spacer { flex: 1; }
+.live { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 0 rgba(46,230,168,.5); animation: pulse 2s infinite; }
+.dot.stale { background: var(--faint); animation: none; box-shadow: none; }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(46,230,168,.45); } 70% { box-shadow: 0 0 0 7px rgba(46,230,168,0); } 100% { box-shadow: 0 0 0 0 rgba(46,230,168,0); } }
+.last-px { font-family: var(--mono); font-size: 16px; font-weight: 600; }
+
+#haltbar {
+  display: none; padding: 9px 24px; font-size: 13px; font-weight: 600;
+  background: var(--red-dim); color: var(--red); border-bottom: 1px solid rgba(255,92,122,.25);
+}
+
+/* ───── tabs ───── */
+nav { display: flex; gap: 4px; padding: 14px 24px 0; }
+nav button {
+  background: none; border: none; color: var(--muted); font: inherit; font-weight: 600;
+  padding: 8px 14px; border-radius: 9px; cursor: pointer; transition: all .15s;
+}
+nav button:hover { color: var(--text); background: var(--panel-2); }
+nav button.active { color: var(--text); background: var(--panel-2); box-shadow: inset 0 0 0 1px var(--border); }
+main { padding: 16px 24px 48px; max-width: 1480px; margin: 0 auto; }
+.tab { display: none; } .tab.active { display: block; }
+
+/* ───── cards & grid ───── */
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.kpi {
+  background: linear-gradient(180deg, var(--panel-2), var(--panel));
+  border: 1px solid var(--border-soft); border-radius: 14px; padding: 13px 15px;
+}
+.kpi .label { font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--faint); margin-bottom: 7px; }
+.kpi .value { font-family: var(--mono); font-size: 19px; font-weight: 600; letter-spacing: -.01em; }
+.kpi .sub { font-size: 11px; color: var(--muted); margin-top: 4px; font-family: var(--mono); }
+
+.grid { display: grid; gap: 12px; grid-template-columns: repeat(12, 1fr); }
+.card {
+  background: linear-gradient(180deg, var(--panel-2), var(--panel));
+  border: 1px solid var(--border-soft); border-radius: 16px; overflow: hidden;
+}
+.card-h {
+  display: flex; align-items: center; gap: 10px; padding: 13px 16px 0;
+  font-size: 12.5px; font-weight: 700; letter-spacing: .03em; color: var(--muted);
+  text-transform: uppercase;
+}
+.card-h .hint { font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--faint); margin-left: auto; font-size: 11.5px; }
+.span8 { grid-column: span 8; } .span6 { grid-column: span 6; }
+.span4 { grid-column: span 4; } .span12 { grid-column: span 12; }
+@media (max-width: 1100px) { .span8, .span6, .span4 { grid-column: span 12; } }
+.chart { height: 380px; padding: 6px 8px 8px; }
+.chart.small { height: 240px; }
+
+/* ───── tables ───── */
+table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+th { text-align: right; padding: 9px 14px; color: var(--faint); font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; border-bottom: 1px solid var(--border-soft); white-space: nowrap; }
+td { text-align: right; padding: 8px 14px; border-bottom: 1px solid var(--border-soft); font-family: var(--mono); white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+tr:last-child td { border-bottom: none; }
+tbody tr { transition: background .1s; }
+tbody tr:hover { background: rgba(110,168,255,.04); }
+.pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 600; font-family: Inter; }
+.pill.long { background: var(--green-dim); color: var(--green); }
+.pill.short { background: var(--red-dim); color: var(--red); }
+.pill.gray { background: rgba(125,133,144,.12); color: var(--muted); }
+.empty { padding: 36px; text-align: center; color: var(--faint); font-size: 13px; }
+
+/* ───── position / activity ───── */
+.pos-body { padding: 14px 16px 16px; }
+.pos-row { display: flex; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid var(--border-soft); font-size: 13px; }
+.pos-row:last-child { border-bottom: none; }
+.pos-row .k { color: var(--muted); } .pos-row .v { font-family: var(--mono); font-weight: 500; }
+.feed { padding: 8px 16px 14px; max-height: 300px; overflow-y: auto; }
+.feed-item { display: flex; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border-soft); font-size: 12px; align-items: baseline; }
+.feed-item:last-child { border-bottom: none; }
+.feed-item .t { color: var(--faint); font-family: var(--mono); flex: none; }
+.feed-item .d { color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+.k-signal { color: var(--green); } .k-reject { color: var(--faint); } .k-risk_block { color: var(--amber); }
+
+/* ───── reports ───── */
+.bars { padding: 12px 16px 16px; }
+.bar-row { display: grid; grid-template-columns: 130px 1fr 50px; align-items: center; gap: 12px; padding: 6px 0; font-size: 12.5px; }
+.bar-row .name { color: var(--muted); font-family: var(--mono); }
+.bar-track { height: 8px; border-radius: 99px; background: var(--border-soft); overflow: hidden; }
+.bar-fill { height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
+.bar-row .n { text-align: right; font-family: var(--mono); color: var(--text); }
+footer { text-align: center; color: var(--faint); font-size: 11.5px; padding: 24px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">σ</div>
+  <h1>Paper Scalper</h1>
+  <span class="badge paper">Paper only</span>
+  <span class="symbol" id="symbol">—</span>
+  <div class="spacer"></div>
+  <span class="last-px" id="lastpx">—</span>
+  <div class="live"><span class="dot" id="livedot"></span><span id="livetxt">connecting…</span></div>
+</header>
+<div id="haltbar"></div>
+
+<nav>
+  <button class="active" data-tab="overview">Overview</button>
+  <button data-tab="trades">Trades</button>
+  <button data-tab="reports">Reports</button>
+</nav>
+
+<main>
+  <!-- ════ OVERVIEW ════ -->
+  <section class="tab active" id="tab-overview">
+    <div class="kpis" id="kpis"></div>
+    <div class="grid">
+      <div class="card span8">
+        <div class="card-h">Price <span class="hint">1-min candles · entries &amp; exits marked</span></div>
+        <div class="chart" id="price-chart"></div>
+      </div>
+      <div class="card span4">
+        <div class="card-h">Equity curve</div>
+        <div class="chart small" id="equity-chart"></div>
+        <div class="card-h" style="padding-top:6px">Open position</div>
+        <div class="pos-body" id="position"><div class="empty" style="padding:14px">flat</div></div>
+      </div>
+      <div class="card span6">
+        <div class="card-h">Recent trades <span class="hint">last 8</span></div>
+        <div id="mini-trades"><div class="empty">No trades yet — observing the market…</div></div>
+      </div>
+      <div class="card span6">
+        <div class="card-h">Signal activity <span class="hint">why the engine did / didn’t trade</span></div>
+        <div class="feed" id="feed"><div class="empty">Waiting for candles…</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════ TRADES ════ -->
+  <section class="tab" id="tab-trades">
+    <div class="card span12">
+      <div class="card-h">Trade journal <span class="hint" id="trades-count"></span></div>
+      <div style="overflow-x:auto" id="trades-table"><div class="empty">No trades yet.</div></div>
+    </div>
+  </section>
+
+  <!-- ════ REPORTS ════ -->
+  <section class="tab" id="tab-reports">
+    <div class="kpis" id="report-kpis"></div>
+    <div class="grid">
+      <div class="card span6">
+        <div class="card-h">Daily performance</div>
+        <div id="daily-table"><div class="empty">No closed trades yet.</div></div>
+      </div>
+      <div class="card span6">
+        <div class="card-h">Exit reasons</div>
+        <div class="bars" id="exit-bars"><div class="empty">—</div></div>
+        <div class="card-h">Long vs short</div>
+        <div class="bars" id="side-split"><div class="empty">—</div></div>
+      </div>
+    </div>
+  </section>
+
+  <footer>paper-scalper · simulated fills only · no broker order APIs exist in this codebase</footer>
+</main>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+const fmt = (x, d = 2) => x == null ? "—" : Number(x).toFixed(d);
+const money = x => x == null ? "—" : usd.format(x);
+const signed = x => (x >= 0 ? "+" : "") + usd.format(x);
+const cls = x => x > 0 ? "up" : x < 0 ? "down" : "flat";
+const hms = ts => new Date(ts * 1000).toLocaleTimeString("en-GB");
+const dur = s => `${Math.floor(s / 60)}m${String(Math.round(s % 60)).padStart(2, "0")}s`;
+
+/* ── tabs ── */
+document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
+  document.querySelectorAll("nav button").forEach(x => x.classList.toggle("active", x === b));
+  document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.id === "tab-" + b.dataset.tab));
+  resizeCharts();
+});
+
+/* ── charts ── */
+const chartOpts = el => ({
+  width: el.clientWidth, height: el.clientHeight,
+  layout: { background: { type: "solid", color: "transparent" }, textColor: "#7d8590",
+            fontFamily: "JetBrains Mono", fontSize: 11 },
+  grid: { vertLines: { color: "rgba(27,34,48,.6)" }, horzLines: { color: "rgba(27,34,48,.6)" } },
+  rightPriceScale: { borderColor: "rgba(27,34,48,.8)" },
+  timeScale: { borderColor: "rgba(27,34,48,.8)", timeVisible: true, secondsVisible: false },
+  crosshair: { mode: 0,
+    vertLine: { color: "#39435a", labelBackgroundColor: "#1b2230" },
+    horzLine: { color: "#39435a", labelBackgroundColor: "#1b2230" } },
+});
+
+const priceEl = $("price-chart");
+const priceChart = LightweightCharts.createChart(priceEl, chartOpts(priceEl));
+const candleSeries = priceChart.addCandlestickSeries({
+  upColor: "#2ee6a8", downColor: "#ff5c7a", borderVisible: false,
+  wickUpColor: "rgba(46,230,168,.6)", wickDownColor: "rgba(255,92,122,.6)",
+});
+const volSeries = priceChart.addHistogramSeries({
+  priceFormat: { type: "volume" }, priceScaleId: "vol", color: "rgba(110,168,255,.25)",
+});
+priceChart.priceScale("vol").applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
+
+const eqEl = $("equity-chart");
+const eqChart = LightweightCharts.createChart(eqEl, chartOpts(eqEl));
+const eqSeries = eqChart.addAreaSeries({
+  lineColor: "#6ea8ff", lineWidth: 2,
+  topColor: "rgba(110,168,255,.30)", bottomColor: "rgba(110,168,255,.02)",
+  priceFormat: { type: "price", precision: 2, minMove: 0.01 },
+});
+
+let slLine = null, tpLine = null, entryLine = null;
+function resizeCharts() {
+  for (const [c, el] of [[priceChart, priceEl], [eqChart, eqEl]])
+    c.applyOptions({ width: el.clientWidth, height: el.clientHeight });
+}
+new ResizeObserver(resizeCharts).observe(document.body);
+
+/* ── render helpers ── */
+function kpiCard(label, value, klass = "", sub = "") {
+  return `<div class="kpi"><div class="label">${label}</div>
+    <div class="value ${klass}">${value}</div>${sub ? `<div class="sub">${sub}</div>` : ""}</div>`;
+}
+
+function tradeRows(trades, full) {
+  return trades.map(t => `<tr>
+    <td>${hms(t.exit_ts)}</td>
+    <td style="text-align:left"><span class="pill ${t.side}">${t.side}</span></td>
+    ${full ? `<td>${fmt(t.qty, 6)}</td>` : ""}
+    <td>${fmt(t.entry_price)}</td><td>${fmt(t.exit_price)}</td>
+    ${full ? `<td>${dur(t.exit_ts - t.entry_ts)}</td><td class="${cls(t.gross_pnl)}">${fmt(t.gross_pnl)}</td><td>${fmt(t.fees)}</td>` : ""}
+    <td class="${cls(t.net_pnl)}">${fmt(t.net_pnl)}</td>
+    <td class="${cls(t.net_pnl_pct)}">${fmt(t.net_pnl_pct, 3)}%</td>
+    <td style="text-align:left"><span class="pill gray">${t.reason_exit.replaceAll("_", " ")}</span></td>
+  </tr>`).join("");
+}
+
+const tradeHead = full => `<thead><tr>
+  <th>Exit</th><th>Side</th>${full ? "<th>Qty</th>" : ""}<th>Entry</th><th>Exit px</th>
+  ${full ? "<th>Held</th><th>Gross $</th><th>Fees $</th>" : ""}<th>Net $</th><th>Net %</th><th>Reason</th>
+</tr></thead>`;
+
+function barList(el, entries, total, colorFn) {
+  if (!entries.length) { el.innerHTML = '<div class="empty">—</div>'; return; }
+  el.innerHTML = entries.map(([name, n]) => `<div class="bar-row">
+    <span class="name">${name.replaceAll("_", " ")}</span>
+    <div class="bar-track"><div class="bar-fill" style="width:${total ? n / total * 100 : 0}%;${colorFn ? `background:${colorFn(name)}` : ""}"></div></div>
+    <span class="n">${n}</span></div>`).join("");
+}
+
+/* ── main refresh ── */
+async function refresh() {
+  let s, trades, equity, candles, signals, daily;
+  try {
+    [s, trades, equity, candles, signals, daily] = await Promise.all([
+      "summary", "trades?limit=500", "equity?limit=2000", "candles?limit=600",
+      "signals?limit=40", "daily",
+    ].map(p => fetch("/api/" + p).then(r => r.json())));
+  } catch { $("livetxt").textContent = "api unreachable"; $("livedot").classList.add("stale"); return; }
+
+  const live = s.live || {};
+  $("symbol").textContent = live.symbol || "";
+  $("lastpx").textContent = live.last_price ? fmt(live.last_price) : "—";
+  const fresh = live.ts && (Date.now() / 1000 - live.ts) < 60;
+  $("livedot").classList.toggle("stale", !fresh && !live.stopped);
+  $("livetxt").textContent = live.stopped ? "runner stopped"
+    : live.ts ? (fresh ? "live · " + hms(live.ts) : "stale · " + hms(live.ts)) : "no data yet";
+  $("haltbar").style.display = live.halted ? "block" : "none";
+  if (live.halted) $("haltbar").textContent = "RISK HALT — " + live.halted + " (resets at UTC midnight)";
+
+  /* KPIs */
+  const ind = live.indicators || {};
+  $("kpis").innerHTML =
+    kpiCard("Equity", money(live.equity), "", live.unrealized ? `unrealized ${signed(live.unrealized)}` : "") +
+    kpiCard("Net P&amp;L", live.equity != null ? signed(s.net_pnl) : money(s.net_pnl), cls(s.net_pnl),
+            `gross ${signed(s.gross_pnl)}`) +
+    kpiCard("Fees paid", money(s.total_fees), "", s.gross_pnl ? `${fmt(s.total_fees / Math.abs(s.gross_pnl) * 100, 0)}% of gross` : "") +
+    kpiCard("Trades", s.trades, "", `${s.wins}W · ${s.losses}L`) +
+    kpiCard("Win rate", fmt(s.win_rate_pct, 1) + "%", s.win_rate_pct >= 50 ? "up" : "") +
+    kpiCard("Profit factor", s.profit_factor == null ? "—" : fmt(s.profit_factor),
+            s.profit_factor >= 1.3 ? "up" : s.profit_factor != null && s.profit_factor < 1 ? "down" : "") +
+    kpiCard("Max drawdown", fmt(s.max_drawdown_pct, 2) + "%", s.max_drawdown_pct > 3 ? "down" : "") +
+    kpiCard("RSI · ATR", `${fmt(ind.rsi, 1)} · ${ind.atr && live.last_price ? fmt(ind.atr / live.last_price * 100, 3) + "%" : "—"}`);
+
+  /* price chart */
+  candleSeries.setData(candles.map(c => ({ time: Math.floor(c.ts_open), open: c.open, high: c.high, low: c.low, close: c.close })));
+  volSeries.setData(candles.map(c => ({ time: Math.floor(c.ts_open), value: c.volume,
+    color: c.close >= c.open ? "rgba(46,230,168,.22)" : "rgba(255,92,122,.22)" })));
+  const t0 = candles.length ? candles[0].ts_open : 0;
+  const markers = [];
+  for (const t of trades) {
+    if (t.entry_ts >= t0) markers.push({
+      time: Math.floor(t.entry_ts), position: t.side === "long" ? "belowBar" : "aboveBar",
+      shape: t.side === "long" ? "arrowUp" : "arrowDown",
+      color: t.side === "long" ? "#2ee6a8" : "#ff5c7a", text: t.side === "long" ? "L" : "S",
+    });
+    if (t.exit_ts >= t0) markers.push({
+      time: Math.floor(t.exit_ts), position: "aboveBar", shape: "circle",
+      color: t.net_pnl >= 0 ? "#2ee6a8" : "#ff5c7a", text: signed(t.net_pnl).replace("$", ""),
+    });
+  }
+  candleSeries.setMarkers(markers.sort((a, b) => a.time - b.time));
+
+  /* SL/TP lines for open position */
+  for (const l of [slLine, tpLine, entryLine]) if (l) candleSeries.removePriceLine(l);
+  slLine = tpLine = entryLine = null;
+  const p = live.position;
+  if (p) {
+    const mk = (price, color, title) => candleSeries.createPriceLine({
+      price, color, lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed, title });
+    entryLine = mk(p.entry_price, "#6ea8ff", "entry");
+    slLine = mk(p.sl, "#ff5c7a", "SL");
+    tpLine = mk(p.tp, "#2ee6a8", "TP");
+  }
+
+  /* equity */
+  eqSeries.setData(equity.map(e => ({ time: Math.floor(e.ts), value: e.equity })));
+
+  /* position card */
+  $("position").innerHTML = !p ? '<div class="empty" style="padding:14px">flat</div>' : `
+    <div class="pos-row"><span class="k">Side</span><span class="v"><span class="pill ${p.side}">${p.side}</span></span></div>
+    <div class="pos-row"><span class="k">Qty</span><span class="v">${fmt(p.qty, 6)}</span></div>
+    <div class="pos-row"><span class="k">Entry</span><span class="v">${fmt(p.entry_price)}</span></div>
+    <div class="pos-row"><span class="k">Stop / Target</span><span class="v"><span class="down">${fmt(p.sl)}</span> / <span class="up">${fmt(p.tp)}</span></span></div>
+    <div class="pos-row"><span class="k">Unrealized</span><span class="v ${cls(live.unrealized)}">${signed(live.unrealized || 0)}</span></div>
+    <div class="pos-row"><span class="k">Opened</span><span class="v">${hms(p.entry_ts)}</span></div>`;
+
+  /* mini trades + full table */
+  if (trades.length) {
+    $("mini-trades").innerHTML = `<table>${tradeHead(false)}<tbody>${tradeRows(trades.slice(0, 8), false)}</tbody></table>`;
+    $("trades-table").innerHTML = `<table>${tradeHead(true)}<tbody>${tradeRows(trades, true)}</tbody></table>`;
+    $("trades-count").textContent = `${trades.length} shown · newest first`;
+  }
+
+  /* signal feed */
+  if (signals.length) $("feed").innerHTML = signals.map(x => `<div class="feed-item">
+    <span class="t">${hms(x.ts)}</span>
+    <span class="k-${x.kind}" style="flex:none;font-weight:600">${x.kind === "signal" ? "ENTRY" : x.kind === "risk_block" ? "BLOCKED" : "skip"}</span>
+    <span class="d">${x.detail}</span></div>`).join("");
+
+  /* reports */
+  $("report-kpis").innerHTML =
+    kpiCard("Avg win", money(s.avg_win), "up") +
+    kpiCard("Avg loss", money(s.avg_loss), "down") +
+    kpiCard("Expectancy / trade", s.trades ? signed(s.net_pnl / s.trades) : "—", s.trades ? cls(s.net_pnl) : "") +
+    kpiCard("Fee drag", s.gross_pnl ? fmt(s.total_fees / Math.abs(s.gross_pnl) * 100, 0) + "%" : "—", "", "fees vs |gross|") +
+    kpiCard("Days traded", daily.length);
+  if (daily.length) $("daily-table").innerHTML = `<table><thead><tr>
+      <th>Date (UTC)</th><th>Trades</th><th>Win %</th><th>Gross $</th><th>Fees $</th><th>Net $</th>
+    </tr></thead><tbody>${daily.map(d => `<tr>
+      <td>${d.day}</td><td>${d.trades}</td><td>${fmt(d.wins / d.trades * 100, 0)}%</td>
+      <td class="${cls(d.gross_pnl)}">${fmt(d.gross_pnl)}</td><td>${fmt(d.fees)}</td>
+      <td class="${cls(d.net_pnl)}">${fmt(d.net_pnl)}</td></tr>`).join("")}</tbody></table>`;
+  const exits = Object.entries(s.exit_reasons || {}).sort((a, b) => b[1] - a[1]);
+  barList($("exit-bars"), exits, s.trades);
+  const sides = Object.entries(s.by_side || {}).map(([k, v]) => [`${k} · ${signed(v.net_pnl)}`, v.trades]);
+  barList($("side-split"), sides, s.trades,
+    name => name.startsWith("long") ? "linear-gradient(90deg,#2ee6a8,#1fae80)" : "linear-gradient(90deg,#ff5c7a,#d44762)");
+}
+
+refresh();
+setInterval(refresh, 3000);
+</script>
+</body>
+</html>
