@@ -18,13 +18,13 @@ class Settings(BaseSettings):
     fee_bps: float = 25.0       # taker fee per side (Alpaca crypto tier 1)
     slippage_bps: float = 3.0   # applied per side on top of bid/ask
 
-    # Risk
+    # Risk — AGGRESSIVE TEST TUNING (paper observation; tighten before judging go/no-go)
     risk_per_trade_pct: float = 0.5      # % of equity risked at SL per trade
     max_notional_fraction: float = 0.5   # cap position notional vs equity
-    daily_stop_pct: float = 2.0          # halt for the UTC day at -2%
-    max_consecutive_losses: int = 3
+    daily_stop_pct: float = 5.0          # halt for the UTC day (production: 2.0)
+    max_consecutive_losses: int = 5      # production: 3
     max_hold_seconds: int = 300
-    cooldown_candles: int = 3
+    cooldown_candles: int = 1            # production: 3
 
     # Strategy filters
     ema_fast: int = 9
@@ -32,16 +32,25 @@ class Settings(BaseSettings):
     rsi_period: int = 14
     atr_period: int = 14
     vol_sma_period: int = 20
-    vol_spike_mult: float = 1.3
-    rsi_long_min: float = 45.0
-    rsi_long_max: float = 65.0
-    rsi_short_min: float = 35.0
-    rsi_short_max: float = 55.0
+    vol_spike_mult: float = 1.15     # production: 1.3
+    rsi_long_min: float = 40.0       # production: 45
+    rsi_long_max: float = 75.0       # production: 65
+    rsi_short_min: float = 25.0      # production: 35
+    rsi_short_max: float = 60.0      # production: 55
     max_spread_bps: float = 5.0
-    ema_sep_min_bps: float = 2.0     # require trend separation, not a bare crossover
+    ema_sep_min_bps: float = 1.0     # production: 2.0
     pullback_tolerance_pct: float = 0.10  # how close price must come to EMA9 to count as pullback
-    min_atr_pct: float = 0.03        # skip dead chop
+    min_atr_pct: float = 0.015       # production: 0.03
     max_atr_pct: float = 0.60        # skip news spikes
+
+    # Momentum breakout lane
+    momo_lookback: int = 12          # candles for breakout high/low
+    momo_vol_mult: float = 1.10
+
+    # Mean-reversion lane
+    mr_rsi_low: float = 32.0
+    mr_rsi_high: float = 68.0
+    mr_vwap_atr_mult: float = 0.8    # required stretch from VWAP in ATRs
 
     # Exits (ATR-adaptive, clamped to the spec's bounds)
     sl_atr_mult: float = 1.2

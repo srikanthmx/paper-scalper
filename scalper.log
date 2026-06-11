@@ -1,0 +1,13 @@
+2026-06-11 00:03:11,280 INFO paper_scalper: paper trading BTC/USD | candle=60s fee=25bps slip=3bps equity=10000.00
+2026-06-11 00:03:11,542 INFO paper_scalper.data.coinbase_feed: subscribed to ['BTC-USD'] on ws-feed.exchange.coinbase.com
+2026-06-11 00:03:11,587 INFO paper_scalper.data.coinbase_feed: coinbase: subscription confirmed
+2026-06-11 00:04:30,499 INFO paper_scalper: paper trading BTC/USD | candle=60s fee=25bps slip=3bps equity=10000.00
+2026-06-11 00:04:30,710 INFO paper_scalper.data.alpaca_crypto_feed: subscribed to ['BTC/USD'] on stream.data.alpaca.markets
+2026-06-11 00:04:30,711 INFO paper_scalper.data.alpaca_crypto_feed: alpaca: {'T': 'success', 'msg': 'connected'}
+2026-06-11 00:04:30,747 INFO paper_scalper.data.alpaca_crypto_feed: alpaca: {'T': 'success', 'msg': 'authenticated'}
+2026-06-11 00:04:30,748 INFO paper_scalper.data.alpaca_crypto_feed: alpaca: {'T': 'subscription', 'trades': ['BTC/USD'], 'quotes': ['BTC/USD'], 'orderbooks': [], 'bars': [], 'updatedBars': [], 'dailyBars': []}
+2026-06-11 00:15:25,692 INFO paper_scalper: paper trading BTC/USD | lanes=['pullback', 'momo', 'meanrev'] candle=60s fee=25bps slip=3bps equity=10000.00/lane
+2026-06-11 00:15:25,860 INFO paper_scalper.data.alpaca_crypto_feed: subscribed to ['BTC/USD'] on stream.data.alpaca.markets
+2026-06-11 00:15:25,860 INFO paper_scalper.data.alpaca_crypto_feed: alpaca: {'T': 'success', 'msg': 'connected'}
+2026-06-11 00:15:25,902 INFO paper_scalper.data.alpaca_crypto_feed: alpaca: {'T': 'success', 'msg': 'authenticated'}
+2026-06-11 00:15:25,902 INFO paper_scalper.data.alpaca_crypto_feed: alpaca: {'T': 'subscription', 'trades': ['BTC/USD'], 'quotes': ['BTC/USD'], 'orderbooks': [], 'bars': [], 'updatedBars': [], 'dailyBars': []}

@@ -41,7 +41,6 @@ body {
 .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 .up { color: var(--green); } .down { color: var(--red); } .flat { color: var(--muted); }
 
-/* ───── top bar ───── */
 header {
   display: flex; align-items: center; gap: 14px;
   padding: 14px 24px; border-bottom: 1px solid var(--border-soft);
@@ -72,18 +71,21 @@ h1 { font-size: 15px; font-weight: 700; letter-spacing: -.01em; }
   background: var(--red-dim); color: var(--red); border-bottom: 1px solid rgba(255,92,122,.25);
 }
 
-/* ───── tabs ───── */
-nav { display: flex; gap: 4px; padding: 14px 24px 0; }
-nav button {
+.bars-row { display: flex; gap: 4px; padding: 14px 24px 0; align-items: center; flex-wrap: wrap; }
+.bars-row .sep { width: 1px; height: 22px; background: var(--border); margin: 0 10px; }
+nav button, .strats button {
   background: none; border: none; color: var(--muted); font: inherit; font-weight: 600;
   padding: 8px 14px; border-radius: 9px; cursor: pointer; transition: all .15s;
 }
-nav button:hover { color: var(--text); background: var(--panel-2); }
+nav button:hover, .strats button:hover { color: var(--text); background: var(--panel-2); }
 nav button.active { color: var(--text); background: var(--panel-2); box-shadow: inset 0 0 0 1px var(--border); }
+.strats { display: flex; gap: 4px; }
+.strats button { font-size: 12.5px; padding: 6px 12px; border-radius: 999px; }
+.strats button.active { color: #07090d; background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
+nav { display: flex; gap: 4px; }
 main { padding: 16px 24px 48px; max-width: 1480px; margin: 0 auto; }
 .tab { display: none; } .tab.active { display: block; }
 
-/* ───── cards & grid ───── */
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: 10px; margin-bottom: 14px; }
 .kpi {
   background: linear-gradient(180deg, var(--panel-2), var(--panel));
@@ -108,9 +110,8 @@ main { padding: 16px 24px 48px; max-width: 1480px; margin: 0 auto; }
 .span4 { grid-column: span 4; } .span12 { grid-column: span 12; }
 @media (max-width: 1100px) { .span8, .span6, .span4 { grid-column: span 12; } }
 .chart { height: 380px; padding: 6px 8px 8px; }
-.chart.small { height: 240px; }
+.chart.small { height: 200px; }
 
-/* ───── tables ───── */
 table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 th { text-align: right; padding: 9px 14px; color: var(--faint); font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; border-bottom: 1px solid var(--border-soft); white-space: nowrap; }
 td { text-align: right; padding: 8px 14px; border-bottom: 1px solid var(--border-soft); font-family: var(--mono); white-space: nowrap; }
@@ -122,27 +123,37 @@ tbody tr:hover { background: rgba(110,168,255,.04); }
 .pill.long { background: var(--green-dim); color: var(--green); }
 .pill.short { background: var(--red-dim); color: var(--red); }
 .pill.gray { background: rgba(125,133,144,.12); color: var(--muted); }
+.pill.pullback { background: rgba(110,168,255,.12); color: var(--accent); }
+.pill.momo { background: rgba(157,123,255,.14); color: var(--accent-2); }
+.pill.meanrev { background: rgba(255,200,87,.12); color: var(--amber); }
 .empty { padding: 36px; text-align: center; color: var(--faint); font-size: 13px; }
 
-/* ───── position / activity ───── */
-.pos-body { padding: 14px 16px 16px; }
-.pos-row { display: flex; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid var(--border-soft); font-size: 13px; }
-.pos-row:last-child { border-bottom: none; }
-.pos-row .k { color: var(--muted); } .pos-row .v { font-family: var(--mono); font-weight: 500; }
-.feed { padding: 8px 16px 14px; max-height: 300px; overflow-y: auto; }
+.lanes { padding: 10px 12px 14px; display: grid; gap: 8px; }
+.lane {
+  border: 1px solid var(--border-soft); border-radius: 12px; padding: 10px 12px;
+  display: flex; align-items: center; gap: 10px; font-size: 12.5px;
+}
+.lane .nm { font-weight: 700; min-width: 76px; }
+.lane .eq { font-family: var(--mono); color: var(--muted); }
+.lane .ps { margin-left: auto; font-family: var(--mono); font-size: 12px; }
+.lane.halted { border-color: rgba(255,92,122,.4); }
+.feed { padding: 8px 16px 14px; max-height: 320px; overflow-y: auto; }
 .feed-item { display: flex; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border-soft); font-size: 12px; align-items: baseline; }
 .feed-item:last-child { border-bottom: none; }
 .feed-item .t { color: var(--faint); font-family: var(--mono); flex: none; }
 .feed-item .d { color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
 .k-signal { color: var(--green); } .k-reject { color: var(--faint); } .k-risk_block { color: var(--amber); }
 
-/* ───── reports ───── */
 .bars { padding: 12px 16px 16px; }
 .bar-row { display: grid; grid-template-columns: 130px 1fr 50px; align-items: center; gap: 12px; padding: 6px 0; font-size: 12.5px; }
 .bar-row .name { color: var(--muted); font-family: var(--mono); }
 .bar-track { height: 8px; border-radius: 99px; background: var(--border-soft); overflow: hidden; }
 .bar-fill { height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
 .bar-row .n { text-align: right; font-family: var(--mono); color: var(--text); }
+.diag { padding: 10px 16px 16px; }
+.diag .strat-block { margin-bottom: 12px; }
+.diag h3 { font-size: 12px; margin-bottom: 6px; }
+.diag li { margin-left: 18px; padding: 2px 0; font-size: 12.5px; color: var(--muted); }
 footer { text-align: center; color: var(--faint); font-size: 11.5px; padding: 24px; }
 </style>
 </head>
@@ -159,11 +170,20 @@ footer { text-align: center; color: var(--faint); font-size: 11.5px; padding: 24
 </header>
 <div id="haltbar"></div>
 
-<nav>
-  <button class="active" data-tab="overview">Overview</button>
-  <button data-tab="trades">Trades</button>
-  <button data-tab="reports">Reports</button>
-</nav>
+<div class="bars-row">
+  <nav>
+    <button class="active" data-tab="overview">Overview</button>
+    <button data-tab="trades">Trades</button>
+    <button data-tab="reports">Reports</button>
+  </nav>
+  <div class="sep"></div>
+  <div class="strats" id="strats">
+    <button class="active" data-strat="all">All</button>
+    <button data-strat="pullback">Pullback</button>
+    <button data-strat="momo">Momentum</button>
+    <button data-strat="meanrev">Mean-rev</button>
+  </div>
+</div>
 
 <main>
   <!-- ════ OVERVIEW ════ -->
@@ -171,22 +191,22 @@ footer { text-align: center; color: var(--faint); font-size: 11.5px; padding: 24
     <div class="kpis" id="kpis"></div>
     <div class="grid">
       <div class="card span8">
-        <div class="card-h">Price <span class="hint">1-min candles · entries &amp; exits marked</span></div>
+        <div class="card-h">Price <span class="hint">1-min candles · P = pullback, M = momentum, R = mean-rev</span></div>
         <div class="chart" id="price-chart"></div>
       </div>
       <div class="card span4">
-        <div class="card-h">Equity curve</div>
+        <div class="card-h">Equity curve <span class="hint" id="eq-hint">combined</span></div>
         <div class="chart small" id="equity-chart"></div>
-        <div class="card-h" style="padding-top:6px">Open position</div>
-        <div class="pos-body" id="position"><div class="empty" style="padding:14px">flat</div></div>
+        <div class="card-h" style="padding-top:6px">Strategy lanes</div>
+        <div class="lanes" id="lanes"></div>
       </div>
       <div class="card span6">
         <div class="card-h">Recent trades <span class="hint">last 8</span></div>
-        <div id="mini-trades"><div class="empty">No trades yet — observing the market…</div></div>
+        <div id="mini-trades"></div>
       </div>
       <div class="card span6">
-        <div class="card-h">Signal activity <span class="hint">why the engine did / didn’t trade</span></div>
-        <div class="feed" id="feed"><div class="empty">Waiting for candles…</div></div>
+        <div class="card-h">Signal activity <span class="hint">why each lane did / didn’t trade</span></div>
+        <div class="feed" id="feed"></div>
       </div>
     </div>
   </section>
@@ -195,23 +215,33 @@ footer { text-align: center; color: var(--faint); font-size: 11.5px; padding: 24
   <section class="tab" id="tab-trades">
     <div class="card span12">
       <div class="card-h">Trade journal <span class="hint" id="trades-count"></span></div>
-      <div style="overflow-x:auto" id="trades-table"><div class="empty">No trades yet.</div></div>
+      <div style="overflow-x:auto" id="trades-table"></div>
     </div>
   </section>
 
   <!-- ════ REPORTS ════ -->
   <section class="tab" id="tab-reports">
+    <div class="grid" style="margin-bottom:12px">
+      <div class="card span12">
+        <div class="card-h">Strategy comparison <span class="hint">live, updates automatically</span></div>
+        <div style="overflow-x:auto" id="compare-table"></div>
+      </div>
+    </div>
     <div class="kpis" id="report-kpis"></div>
     <div class="grid">
       <div class="card span6">
-        <div class="card-h">Daily performance</div>
-        <div id="daily-table"><div class="empty">No closed trades yet.</div></div>
+        <div class="card-h">Daily performance <span class="hint" id="daily-hint"></span></div>
+        <div id="daily-table"></div>
       </div>
       <div class="card span6">
         <div class="card-h">Exit reasons</div>
-        <div class="bars" id="exit-bars"><div class="empty">—</div></div>
+        <div class="bars" id="exit-bars"></div>
         <div class="card-h">Long vs short</div>
-        <div class="bars" id="side-split"><div class="empty">—</div></div>
+        <div class="bars" id="side-split"></div>
+      </div>
+      <div class="card span12">
+        <div class="card-h">Auto-diagnostics <span class="hint">heuristics from STRATEGY.md, recomputed live</span></div>
+        <div class="diag" id="diag"></div>
       </div>
     </div>
   </section>
@@ -229,12 +259,21 @@ const signed = x => (x >= 0 ? "+" : "") + usd.format(x);
 const cls = x => x > 0 ? "up" : x < 0 ? "down" : "flat";
 const hms = ts => new Date(ts * 1000).toLocaleTimeString("en-GB");
 const dur = s => `${Math.floor(s / 60)}m${String(Math.round(s % 60)).padStart(2, "0")}s`;
+const STRAT_LETTER = { pullback: "P", momo: "M", meanrev: "R" };
+const STRAT_NAME = { pullback: "Pullback", momo: "Momentum", meanrev: "Mean-rev" };
+let strat = "all";
 
-/* ── tabs ── */
 document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
   document.querySelectorAll("nav button").forEach(x => x.classList.toggle("active", x === b));
   document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.id === "tab-" + b.dataset.tab));
   resizeCharts();
+});
+document.querySelectorAll("#strats button").forEach(b => b.onclick = () => {
+  strat = b.dataset.strat;
+  document.querySelectorAll("#strats button").forEach(x => x.classList.toggle("active", x === b));
+  $("eq-hint").textContent = strat === "all" ? "combined" : STRAT_NAME[strat];
+  $("daily-hint").textContent = strat === "all" ? "all strategies" : STRAT_NAME[strat];
+  refresh();
 });
 
 /* ── charts ── */
@@ -249,7 +288,6 @@ const chartOpts = el => ({
     vertLine: { color: "#39435a", labelBackgroundColor: "#1b2230" },
     horzLine: { color: "#39435a", labelBackgroundColor: "#1b2230" } },
 });
-
 const priceEl = $("price-chart");
 const priceChart = LightweightCharts.createChart(priceEl, chartOpts(priceEl));
 const candleSeries = priceChart.addCandlestickSeries({
@@ -260,7 +298,6 @@ const volSeries = priceChart.addHistogramSeries({
   priceFormat: { type: "volume" }, priceScaleId: "vol", color: "rgba(110,168,255,.25)",
 });
 priceChart.priceScale("vol").applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
-
 const eqEl = $("equity-chart");
 const eqChart = LightweightCharts.createChart(eqEl, chartOpts(eqEl));
 const eqSeries = eqChart.addAreaSeries({
@@ -268,23 +305,21 @@ const eqSeries = eqChart.addAreaSeries({
   topColor: "rgba(110,168,255,.30)", bottomColor: "rgba(110,168,255,.02)",
   priceFormat: { type: "price", precision: 2, minMove: 0.01 },
 });
-
-let slLine = null, tpLine = null, entryLine = null;
+let priceLines = [];
 function resizeCharts() {
   for (const [c, el] of [[priceChart, priceEl], [eqChart, eqEl]])
     c.applyOptions({ width: el.clientWidth, height: el.clientHeight });
 }
 new ResizeObserver(resizeCharts).observe(document.body);
 
-/* ── render helpers ── */
 function kpiCard(label, value, klass = "", sub = "") {
   return `<div class="kpi"><div class="label">${label}</div>
     <div class="value ${klass}">${value}</div>${sub ? `<div class="sub">${sub}</div>` : ""}</div>`;
 }
-
 function tradeRows(trades, full) {
   return trades.map(t => `<tr>
     <td>${hms(t.exit_ts)}</td>
+    <td style="text-align:left"><span class="pill ${t.strategy}">${STRAT_NAME[t.strategy] || t.strategy}</span></td>
     <td style="text-align:left"><span class="pill ${t.side}">${t.side}</span></td>
     ${full ? `<td>${fmt(t.qty, 6)}</td>` : ""}
     <td>${fmt(t.entry_price)}</td><td>${fmt(t.exit_price)}</td>
@@ -294,47 +329,53 @@ function tradeRows(trades, full) {
     <td style="text-align:left"><span class="pill gray">${t.reason_exit.replaceAll("_", " ")}</span></td>
   </tr>`).join("");
 }
-
 const tradeHead = full => `<thead><tr>
-  <th>Exit</th><th>Side</th>${full ? "<th>Qty</th>" : ""}<th>Entry</th><th>Exit px</th>
+  <th>Exit</th><th>Strategy</th><th>Side</th>${full ? "<th>Qty</th>" : ""}<th>Entry</th><th>Exit px</th>
   ${full ? "<th>Held</th><th>Gross $</th><th>Fees $</th>" : ""}<th>Net $</th><th>Net %</th><th>Reason</th>
 </tr></thead>`;
-
 function barList(el, entries, total, colorFn) {
-  if (!entries.length) { el.innerHTML = '<div class="empty">—</div>'; return; }
-  el.innerHTML = entries.map(([name, n]) => `<div class="bar-row">
+  el.innerHTML = entries.length ? entries.map(([name, n]) => `<div class="bar-row">
     <span class="name">${name.replaceAll("_", " ")}</span>
     <div class="bar-track"><div class="bar-fill" style="width:${total ? n / total * 100 : 0}%;${colorFn ? `background:${colorFn(name)}` : ""}"></div></div>
-    <span class="n">${n}</span></div>`).join("");
+    <span class="n">${n}</span></div>`).join("") : '<div class="empty">—</div>';
 }
 
-/* ── main refresh ── */
 async function refresh() {
-  let s, trades, equity, candles, signals, daily;
+  const q = strat === "all" ? "" : "&strategy=" + strat;
+  let s, ov, trades, equity, candles, signals, daily;
   try {
-    [s, trades, equity, candles, signals, daily] = await Promise.all([
-      "summary", "trades?limit=500", "equity?limit=2000", "candles?limit=600",
-      "signals?limit=40", "daily",
+    [s, ov, trades, equity, candles, signals, daily] = await Promise.all([
+      `summary?x=1${q}`, "overview", `trades?limit=500${q}`,
+      `equity?limit=2000${q ? q : "&strategy=all"}`, "candles?limit=600",
+      `signals?limit=40${q}`, `daily?x=1${q}`,
     ].map(p => fetch("/api/" + p).then(r => r.json())));
   } catch { $("livetxt").textContent = "api unreachable"; $("livedot").classList.add("stale"); return; }
 
   const live = s.live || {};
+  const lanes = live.lanes || {};
   $("symbol").textContent = live.symbol || "";
   $("lastpx").textContent = live.last_price ? fmt(live.last_price) : "—";
   const fresh = live.ts && (Date.now() / 1000 - live.ts) < 60;
   $("livedot").classList.toggle("stale", !fresh && !live.stopped);
   $("livetxt").textContent = live.stopped ? "runner stopped"
     : live.ts ? (fresh ? "live · " + hms(live.ts) : "stale · " + hms(live.ts)) : "no data yet";
-  $("haltbar").style.display = live.halted ? "block" : "none";
-  if (live.halted) $("haltbar").textContent = "RISK HALT — " + live.halted + " (resets at UTC midnight)";
+  const halts = Object.entries(lanes).filter(([, l]) => l.halted)
+    .map(([n, l]) => `${STRAT_NAME[n]}: ${l.halted}`);
+  $("haltbar").style.display = halts.length ? "block" : "none";
+  if (halts.length) $("haltbar").textContent = "RISK HALT — " + halts.join(" · ") + " (resets at UTC midnight)";
 
-  /* KPIs */
+  /* KPIs (selected scope) */
+  const scopeEquity = strat === "all" ? live.equity
+    : lanes[strat] ? lanes[strat].equity : null;
+  const scopeUnreal = strat === "all" ? live.unrealized
+    : lanes[strat] ? lanes[strat].unrealized : null;
   const ind = live.indicators || {};
   $("kpis").innerHTML =
-    kpiCard("Equity", money(live.equity), "", live.unrealized ? `unrealized ${signed(live.unrealized)}` : "") +
-    kpiCard("Net P&amp;L", live.equity != null ? signed(s.net_pnl) : money(s.net_pnl), cls(s.net_pnl),
-            `gross ${signed(s.gross_pnl)}`) +
-    kpiCard("Fees paid", money(s.total_fees), "", s.gross_pnl ? `${fmt(s.total_fees / Math.abs(s.gross_pnl) * 100, 0)}% of gross` : "") +
+    kpiCard("Equity" + (strat === "all" ? " (3 lanes)" : ""), money(scopeEquity), "",
+            scopeUnreal ? `unrealized ${signed(scopeUnreal)}` : "") +
+    kpiCard("Net P&amp;L", signed(s.net_pnl), cls(s.net_pnl), `gross ${signed(s.gross_pnl)}`) +
+    kpiCard("Fees paid", money(s.total_fees), "",
+            s.gross_pnl ? `${fmt(s.total_fees / Math.abs(s.gross_pnl) * 100, 0)}% of gross` : "") +
     kpiCard("Trades", s.trades, "", `${s.wins}W · ${s.losses}L`) +
     kpiCard("Win rate", fmt(s.win_rate_pct, 1) + "%", s.win_rate_pct >= 50 ? "up" : "") +
     kpiCard("Profit factor", s.profit_factor == null ? "—" : fmt(s.profit_factor),
@@ -342,7 +383,7 @@ async function refresh() {
     kpiCard("Max drawdown", fmt(s.max_drawdown_pct, 2) + "%", s.max_drawdown_pct > 3 ? "down" : "") +
     kpiCard("RSI · ATR", `${fmt(ind.rsi, 1)} · ${ind.atr && live.last_price ? fmt(ind.atr / live.last_price * 100, 3) + "%" : "—"}`);
 
-  /* price chart */
+  /* price chart + markers (filtered by strategy scope) */
   candleSeries.setData(candles.map(c => ({ time: Math.floor(c.ts_open), open: c.open, high: c.high, low: c.low, close: c.close })));
   volSeries.setData(candles.map(c => ({ time: Math.floor(c.ts_open), value: c.volume,
     color: c.close >= c.open ? "rgba(46,230,168,.22)" : "rgba(255,92,122,.22)" })));
@@ -352,73 +393,100 @@ async function refresh() {
     if (t.entry_ts >= t0) markers.push({
       time: Math.floor(t.entry_ts), position: t.side === "long" ? "belowBar" : "aboveBar",
       shape: t.side === "long" ? "arrowUp" : "arrowDown",
-      color: t.side === "long" ? "#2ee6a8" : "#ff5c7a", text: t.side === "long" ? "L" : "S",
+      color: t.side === "long" ? "#2ee6a8" : "#ff5c7a",
+      text: STRAT_LETTER[t.strategy] || "?",
     });
     if (t.exit_ts >= t0) markers.push({
       time: Math.floor(t.exit_ts), position: "aboveBar", shape: "circle",
-      color: t.net_pnl >= 0 ? "#2ee6a8" : "#ff5c7a", text: signed(t.net_pnl).replace("$", ""),
+      color: t.net_pnl >= 0 ? "#2ee6a8" : "#ff5c7a",
+      text: (STRAT_LETTER[t.strategy] || "") + " " + signed(t.net_pnl).replace("$", ""),
     });
   }
   candleSeries.setMarkers(markers.sort((a, b) => a.time - b.time));
 
-  /* SL/TP lines for open position */
-  for (const l of [slLine, tpLine, entryLine]) if (l) candleSeries.removePriceLine(l);
-  slLine = tpLine = entryLine = null;
-  const p = live.position;
-  if (p) {
-    const mk = (price, color, title) => candleSeries.createPriceLine({
-      price, color, lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed, title });
-    entryLine = mk(p.entry_price, "#6ea8ff", "entry");
-    slLine = mk(p.sl, "#ff5c7a", "SL");
-    tpLine = mk(p.tp, "#2ee6a8", "TP");
+  /* SL/TP lines for open positions in scope */
+  priceLines.forEach(l => candleSeries.removePriceLine(l));
+  priceLines = [];
+  for (const [name, lane] of Object.entries(lanes)) {
+    if (!lane.position || (strat !== "all" && strat !== name)) continue;
+    const p = lane.position;
+    const letter = STRAT_LETTER[name];
+    const mk = (price, color, title) => priceLines.push(candleSeries.createPriceLine({
+      price, color, lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed, title }));
+    mk(p.entry_price, "#6ea8ff", letter + " entry");
+    mk(p.sl, "#ff5c7a", letter + " SL");
+    mk(p.tp, "#2ee6a8", letter + " TP");
   }
 
-  /* equity */
+  /* equity curve (scope) */
   eqSeries.setData(equity.map(e => ({ time: Math.floor(e.ts), value: e.equity })));
 
-  /* position card */
-  $("position").innerHTML = !p ? '<div class="empty" style="padding:14px">flat</div>' : `
-    <div class="pos-row"><span class="k">Side</span><span class="v"><span class="pill ${p.side}">${p.side}</span></span></div>
-    <div class="pos-row"><span class="k">Qty</span><span class="v">${fmt(p.qty, 6)}</span></div>
-    <div class="pos-row"><span class="k">Entry</span><span class="v">${fmt(p.entry_price)}</span></div>
-    <div class="pos-row"><span class="k">Stop / Target</span><span class="v"><span class="down">${fmt(p.sl)}</span> / <span class="up">${fmt(p.tp)}</span></span></div>
-    <div class="pos-row"><span class="k">Unrealized</span><span class="v ${cls(live.unrealized)}">${signed(live.unrealized || 0)}</span></div>
-    <div class="pos-row"><span class="k">Opened</span><span class="v">${hms(p.entry_ts)}</span></div>`;
+  /* lanes panel */
+  const laneNames = Object.keys(lanes);
+  $("lanes").innerHTML = laneNames.length ? laneNames.map(n => {
+    const l = lanes[n];
+    const p = l.position;
+    return `<div class="lane ${l.halted ? "halted" : ""}">
+      <span class="pill ${n}">${STRAT_NAME[n]}</span>
+      <span class="eq">${money(l.equity)}</span>
+      ${l.halted ? '<span class="pill gray">halted</span>' : ""}
+      <span class="ps">${p
+        ? `<span class="${p.side === "long" ? "up" : "down"}">${p.side.toUpperCase()}</span> @ ${fmt(p.entry_price)} <span class="${cls(l.unrealized)}">${signed(l.unrealized)}</span>`
+        : '<span class="flat">flat</span>'}</span>
+    </div>`;
+  }).join("") : '<div class="empty" style="padding:14px">runner offline</div>';
 
-  /* mini trades + full table */
-  const noTrades = '<div class="empty">No trades yet — observing the market…</div>';
+  /* trades tables + feed */
+  const noTrades = '<div class="empty">No trades yet — lanes are observing the market…</div>';
   $("mini-trades").innerHTML = trades.length
     ? `<table>${tradeHead(false)}<tbody>${tradeRows(trades.slice(0, 8), false)}</tbody></table>` : noTrades;
   $("trades-table").innerHTML = trades.length
     ? `<table>${tradeHead(true)}<tbody>${tradeRows(trades, true)}</tbody></table>` : noTrades;
   $("trades-count").textContent = trades.length ? `${trades.length} shown · newest first` : "";
-
-  /* signal feed */
   $("feed").innerHTML = signals.length ? signals.map(x => `<div class="feed-item">
     <span class="t">${hms(x.ts)}</span>
+    <span class="pill ${x.strategy}" style="flex:none">${STRAT_LETTER[x.strategy] || "?"}</span>
     <span class="k-${x.kind}" style="flex:none;font-weight:600">${x.kind === "signal" ? "ENTRY" : x.kind === "risk_block" ? "BLOCKED" : "skip"}</span>
     <span class="d">${x.detail}</span></div>`).join("")
-    : '<div class="empty">Waiting for candles… (indicators warm up for ~22 minutes)</div>';
+    : '<div class="empty">Waiting for candles… (indicators warm up ~20 minutes after start)</div>';
 
-  /* reports */
+  /* ── reports ── */
+  const strats = ov.strategies || {};
+  $("compare-table").innerHTML = `<table><thead><tr>
+    <th>Strategy</th><th>Equity</th><th>Trades</th><th>Win %</th><th>Net $</th><th>Fees $</th>
+    <th>Profit factor</th><th>Avg win</th><th>Avg loss</th><th>Max DD</th><th>Status</th>
+  </tr></thead><tbody>${Object.entries(strats).map(([n, v]) => {
+    const lane = lanes[n] || {};
+    return `<tr>
+    <td><span class="pill ${n}">${STRAT_NAME[n]}</span></td>
+    <td>${money(lane.equity)}</td><td>${v.trades}</td><td>${fmt(v.win_rate_pct, 0)}%</td>
+    <td class="${cls(v.net_pnl)}">${fmt(v.net_pnl)}</td><td>${fmt(v.total_fees)}</td>
+    <td>${v.profit_factor == null ? "—" : fmt(v.profit_factor)}</td>
+    <td class="up">${fmt(v.avg_win)}</td><td class="down">${fmt(v.avg_loss)}</td>
+    <td>${fmt(v.max_drawdown_pct, 2)}%</td>
+    <td style="text-align:left">${lane.halted ? `<span class="pill gray">halted</span>` : lane.position ? `<span class="pill ${lane.position.side}">in ${lane.position.side}</span>` : '<span class="pill gray">flat</span>'}</td>
+  </tr>`;}).join("")}</tbody></table>`;
+
   $("report-kpis").innerHTML =
+    kpiCard("Scope", strat === "all" ? "All strategies" : STRAT_NAME[strat]) +
     kpiCard("Avg win", money(s.avg_win), "up") +
     kpiCard("Avg loss", money(s.avg_loss), "down") +
     kpiCard("Expectancy / trade", s.trades ? signed(s.net_pnl / s.trades) : "—", s.trades ? cls(s.net_pnl) : "") +
-    kpiCard("Fee drag", s.gross_pnl ? fmt(s.total_fees / Math.abs(s.gross_pnl) * 100, 0) + "%" : "—", "", "fees vs |gross|") +
-    kpiCard("Days traded", daily.length);
-  $("daily-table").innerHTML = '<div class="empty">No closed trades yet.</div>';
-  if (daily.length) $("daily-table").innerHTML = `<table><thead><tr>
+    kpiCard("Fee drag", s.gross_pnl ? fmt(s.total_fees / Math.abs(s.gross_pnl) * 100, 0) + "%" : "—", "", "fees vs |gross|");
+  $("daily-table").innerHTML = daily.length ? `<table><thead><tr>
       <th>Date (UTC)</th><th>Trades</th><th>Win %</th><th>Gross $</th><th>Fees $</th><th>Net $</th>
     </tr></thead><tbody>${daily.map(d => `<tr>
       <td>${d.day}</td><td>${d.trades}</td><td>${fmt(d.wins / d.trades * 100, 0)}%</td>
       <td class="${cls(d.gross_pnl)}">${fmt(d.gross_pnl)}</td><td>${fmt(d.fees)}</td>
-      <td class="${cls(d.net_pnl)}">${fmt(d.net_pnl)}</td></tr>`).join("")}</tbody></table>`;
-  const exits = Object.entries(s.exit_reasons || {}).sort((a, b) => b[1] - a[1]);
-  barList($("exit-bars"), exits, s.trades);
-  const sides = Object.entries(s.by_side || {}).map(([k, v]) => [`${k} · ${signed(v.net_pnl)}`, v.trades]);
-  barList($("side-split"), sides, s.trades,
+      <td class="${cls(d.net_pnl)}">${fmt(d.net_pnl)}</td></tr>`).join("")}</tbody></table>`
+    : '<div class="empty">No closed trades yet.</div>';
+  barList($("exit-bars"), Object.entries(s.exit_reasons || {}).sort((a, b) => b[1] - a[1]), s.trades);
+  barList($("side-split"),
+    Object.entries(s.by_side || {}).map(([k, v]) => [`${k} · ${signed(v.net_pnl)}`, v.trades]), s.trades,
     name => name.startsWith("long") ? "linear-gradient(90deg,#2ee6a8,#1fae80)" : "linear-gradient(90deg,#ff5c7a,#d44762)");
+  $("diag").innerHTML = Object.entries(ov.diagnostics || {}).map(([n, notes]) =>
+    `<div class="strat-block"><h3><span class="pill ${n}">${STRAT_NAME[n]}</span></h3>
+     <ul>${notes.map(x => `<li>${x}</li>`).join("")}</ul></div>`).join("");
 }
 
 refresh();

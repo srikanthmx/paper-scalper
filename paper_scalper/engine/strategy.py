@@ -46,6 +46,10 @@ class Snapshot:
 
 
 class Strategy:
+    """Pullback-to-EMA9 trend scalper (v1.1)."""
+
+    name = "pullback"
+
     def __init__(self, cfg: Settings) -> None:
         self.cfg = cfg
         self.vwap = SessionVWAP()

@@ -1,4 +1,4 @@
-"""SQLite trade journal. The runner writes; the dashboard and review tool read."""
+"""SQLite trade journal, multi-strategy. The runner writes; the dashboard reads."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS trades (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     symbol TEXT NOT NULL,
+    strategy TEXT NOT NULL DEFAULT 'pullback',
     side TEXT NOT NULL,
     qty REAL NOT NULL,
     entry_ts REAL NOT NULL,
@@ -28,6 +29,7 @@ CREATE TABLE IF NOT EXISTS trades (
 );
 CREATE TABLE IF NOT EXISTS equity_snapshots (
     ts REAL NOT NULL,
+    strategy TEXT NOT NULL DEFAULT 'all',
     equity REAL NOT NULL
 );
 CREATE TABLE IF NOT EXISTS state (
@@ -37,6 +39,7 @@ CREATE TABLE IF NOT EXISTS state (
 CREATE TABLE IF NOT EXISTS signal_log (
     ts REAL NOT NULL,
     symbol TEXT NOT NULL,
+    strategy TEXT NOT NULL DEFAULT 'pullback',
     kind TEXT NOT NULL,      -- 'signal' | 'reject' | 'risk_block'
     detail TEXT NOT NULL
 );
@@ -52,6 +55,13 @@ CREATE TABLE IF NOT EXISTS candles (
 );
 """
 
+# Columns added after the initial release; applied to pre-existing databases.
+MIGRATIONS = [
+    ("trades", "strategy", "TEXT NOT NULL DEFAULT 'pullback'"),
+    ("equity_snapshots", "strategy", "TEXT NOT NULL DEFAULT 'all'"),
+    ("signal_log", "strategy", "TEXT NOT NULL DEFAULT 'pullback'"),
+]
+
 
 class Journal:
     def __init__(self, path: str) -> None:
@@ -60,24 +70,39 @@ class Journal:
         self._lock = threading.Lock()
         with self._lock:
             self._conn.executescript(SCHEMA)
+            for table, column, decl in MIGRATIONS:
+                cols = {r["name"] for r in self._conn.execute(f"PRAGMA table_info({table})")}
+                if column not in cols:
+                    self._conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
             self._conn.commit()
 
-    def record_trade(self, symbol: str, trade: ClosedTrade) -> None:
+    def record_trade(self, symbol: str, strategy: str, trade: ClosedTrade) -> None:
         with self._lock:
             self._conn.execute(
-                "INSERT INTO trades (symbol, side, qty, entry_ts, entry_price, exit_ts,"
-                " exit_price, fees, gross_pnl, net_pnl, net_pnl_pct, reason_entry, reason_exit)"
-                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                (symbol, trade.side, trade.qty, trade.entry_ts, trade.entry_price,
+                "INSERT INTO trades (symbol, strategy, side, qty, entry_ts, entry_price,"
+                " exit_ts, exit_price, fees, gross_pnl, net_pnl, net_pnl_pct,"
+                " reason_entry, reason_exit) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (symbol, strategy, trade.side, trade.qty, trade.entry_ts, trade.entry_price,
                  trade.exit_ts, trade.exit_price, trade.fees, trade.gross_pnl,
                  trade.net_pnl, trade.net_pnl_pct, trade.reason_entry, trade.reason_exit),
             )
             self._conn.commit()
 
-    def record_equity(self, ts: float, equity: float) -> None:
+    def record_equity(self, ts: float, equity: float, strategy: str = "all") -> None:
         with self._lock:
             self._conn.execute(
-                "INSERT INTO equity_snapshots (ts, equity) VALUES (?,?)", (ts, equity)
+                "INSERT INTO equity_snapshots (ts, strategy, equity) VALUES (?,?,?)",
+                (ts, strategy, equity),
+            )
+            self._conn.commit()
+
+    def record_signal(self, ts: float, symbol: str, strategy: str, kind: str,
+                      detail: str) -> None:
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO signal_log (ts, symbol, strategy, kind, detail)"
+                " VALUES (?,?,?,?,?)",
+                (ts, symbol, strategy, kind, detail),
             )
             self._conn.commit()
 
@@ -88,40 +113,6 @@ class Journal:
                 "INSERT OR REPLACE INTO candles (symbol, ts_open, open, high, low, close, volume)"
                 " VALUES (?,?,?,?,?,?,?)",
                 (symbol, ts_open, open_, high, low, close, volume),
-            )
-            self._conn.commit()
-
-    def candles(self, limit: int = 600) -> list[dict[str, Any]]:
-        with self._lock:
-            rows = self._conn.execute(
-                "SELECT ts_open, open, high, low, close, volume FROM candles"
-                " ORDER BY ts_open DESC LIMIT ?", (limit,)
-            ).fetchall()
-        return [dict(r) for r in reversed(rows)]
-
-    def signals(self, limit: int = 30) -> list[dict[str, Any]]:
-        with self._lock:
-            rows = self._conn.execute(
-                "SELECT ts, symbol, kind, detail FROM signal_log ORDER BY ts DESC LIMIT ?",
-                (limit,),
-            ).fetchall()
-        return [dict(r) for r in rows]
-
-    def daily_summary(self) -> list[dict[str, Any]]:
-        with self._lock:
-            rows = self._conn.execute(
-                "SELECT date(exit_ts, 'unixepoch') AS day, COUNT(*) AS trades,"
-                " SUM(CASE WHEN net_pnl > 0 THEN 1 ELSE 0 END) AS wins,"
-                " SUM(net_pnl) AS net_pnl, SUM(gross_pnl) AS gross_pnl, SUM(fees) AS fees"
-                " FROM trades GROUP BY day ORDER BY day DESC",
-            ).fetchall()
-        return [dict(r) for r in rows]
-
-    def record_signal(self, ts: float, symbol: str, kind: str, detail: str) -> None:
-        with self._lock:
-            self._conn.execute(
-                "INSERT INTO signal_log (ts, symbol, kind, detail) VALUES (?,?,?,?)",
-                (ts, symbol, kind, detail),
             )
             self._conn.commit()
 
@@ -139,23 +130,60 @@ class Journal:
             row = self._conn.execute("SELECT value FROM state WHERE key=?", (key,)).fetchone()
         return json.loads(row["value"]) if row else None
 
-    def trades(self, limit: int = 200) -> list[dict[str, Any]]:
+    @staticmethod
+    def _strat_clause(strategy: str | None) -> tuple[str, list[Any]]:
+        if strategy is None or strategy == "all":
+            return "", []
+        return " WHERE strategy=?", [strategy]
+
+    def trades(self, limit: int = 200, strategy: str | None = None) -> list[dict[str, Any]]:
+        where, params = self._strat_clause(strategy)
         with self._lock:
             rows = self._conn.execute(
-                "SELECT * FROM trades ORDER BY exit_ts DESC LIMIT ?", (limit,)
+                f"SELECT * FROM trades{where} ORDER BY exit_ts DESC LIMIT ?",
+                [*params, limit],
             ).fetchall()
         return [dict(r) for r in rows]
 
-    def equity_curve(self, limit: int = 2000) -> list[dict[str, Any]]:
+    def candles(self, limit: int = 600) -> list[dict[str, Any]]:
         with self._lock:
             rows = self._conn.execute(
-                "SELECT ts, equity FROM equity_snapshots ORDER BY ts DESC LIMIT ?", (limit,)
+                "SELECT ts_open, open, high, low, close, volume FROM candles"
+                " ORDER BY ts_open DESC LIMIT ?", (limit,)
             ).fetchall()
         return [dict(r) for r in reversed(rows)]
 
-    def summary(self) -> dict[str, Any]:
-        trades = self.trades(limit=100_000)
-        equity = self.equity_curve(limit=100_000)
+    def signals(self, limit: int = 30, strategy: str | None = None) -> list[dict[str, Any]]:
+        where, params = self._strat_clause(strategy)
+        with self._lock:
+            rows = self._conn.execute(
+                f"SELECT ts, symbol, strategy, kind, detail FROM signal_log{where}"
+                " ORDER BY ts DESC, rowid DESC LIMIT ?", [*params, limit],
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def equity_curve(self, limit: int = 2000, strategy: str = "all") -> list[dict[str, Any]]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT ts, equity FROM equity_snapshots WHERE strategy=?"
+                " ORDER BY ts DESC LIMIT ?", (strategy, limit),
+            ).fetchall()
+        return [dict(r) for r in reversed(rows)]
+
+    def daily_summary(self, strategy: str | None = None) -> list[dict[str, Any]]:
+        where, params = self._strat_clause(strategy)
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT date(exit_ts, 'unixepoch') AS day, COUNT(*) AS trades,"
+                " SUM(CASE WHEN net_pnl > 0 THEN 1 ELSE 0 END) AS wins,"
+                " SUM(net_pnl) AS net_pnl, SUM(gross_pnl) AS gross_pnl, SUM(fees) AS fees"
+                f" FROM trades{where} GROUP BY day ORDER BY day DESC", params,
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def summary(self, strategy: str | None = None) -> dict[str, Any]:
+        trades = self.trades(limit=100_000, strategy=strategy)
+        equity = self.equity_curve(limit=100_000, strategy=strategy or "all")
         wins = [t for t in trades if t["net_pnl"] > 0]
         losses = [t for t in trades if t["net_pnl"] <= 0]
         gross_win = sum(t["net_pnl"] for t in wins)
@@ -166,6 +194,7 @@ class Journal:
             if peak > 0:
                 max_dd = max(max_dd, (peak - point["equity"]) / peak * 100)
         return {
+            "strategy": strategy or "all",
             "trades": len(trades),
             "wins": len(wins),
             "losses": len(losses),
