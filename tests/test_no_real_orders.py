@@ -18,6 +18,9 @@ FORBIDDEN_SUBSTRINGS = [
     "api.alpaca.markets",
     "paper-api.alpaca.markets",
     "/v2/orders",
+    # Coinbase trading/brokerage hosts (data host is ws-feed.exchange.coinbase.com)
+    "api.exchange.coinbase.com",
+    "api.coinbase.com",
     # Upstox order/trading endpoints — Upstox is for market data ONLY
     "api-hft.upstox.com",
     "/order/place",
@@ -35,7 +38,7 @@ NETWORK_MODULES = {
 }
 
 # Only feed adapters and the dashboard may touch the network.
-NETWORK_ALLOWED_FILES = {"alpaca_crypto_feed.py", "app.py"}
+NETWORK_ALLOWED_FILES = {"alpaca_crypto_feed.py", "coinbase_feed.py", "app.py"}
 
 
 def _py_files() -> list[Path]:
@@ -66,8 +69,10 @@ def test_engine_modules_cannot_reach_network() -> None:
             assert not bad, f"{path} imports network module(s) {bad}"
 
 
-def test_data_feed_only_connects_to_data_host() -> None:
-    from paper_scalper.data import alpaca_crypto_feed as feed
+def test_data_feeds_only_connect_to_data_hosts() -> None:
+    from paper_scalper.data import alpaca_crypto_feed, coinbase_feed
 
-    assert feed.ALLOWED_HOST == "stream.data.alpaca.markets"
-    assert feed.WS_URL.startswith("wss://stream.data.alpaca.markets")
+    assert alpaca_crypto_feed.ALLOWED_HOST == "stream.data.alpaca.markets"
+    assert alpaca_crypto_feed.WS_URL.startswith("wss://stream.data.alpaca.markets")
+    assert coinbase_feed.ALLOWED_HOST == "ws-feed.exchange.coinbase.com"
+    assert coinbase_feed.WS_URL.startswith("wss://ws-feed.exchange.coinbase.com")

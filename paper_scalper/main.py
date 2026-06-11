@@ -124,6 +124,9 @@ async def run(feed_name: str, cfg: Settings) -> None:
         if not cfg.alpaca_api_key or not cfg.alpaca_api_secret:
             raise SystemExit("Set ALPACA_API_KEY / ALPACA_API_SECRET in .env (data-only keys)")
         feed = AlpacaCryptoFeed(cfg.alpaca_api_key, cfg.alpaca_api_secret, [cfg.symbol])
+    elif feed_name == "coinbase":
+        from paper_scalper.data.coinbase_feed import CoinbaseFeed
+        feed = CoinbaseFeed([cfg.symbol])
     elif feed_name == "synthetic":
         from paper_scalper.data.replay_feed import SyntheticFeed
         feed = SyntheticFeed(symbol=cfg.symbol)
@@ -143,7 +146,7 @@ async def run(feed_name: str, cfg: Settings) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Paper-only scalper (no real orders)")
-    parser.add_argument("--feed", choices=["alpaca", "synthetic"], default="alpaca")
+    parser.add_argument("--feed", choices=["alpaca", "coinbase", "synthetic"], default="alpaca")
     parser.add_argument("--symbol", default=None)
     args = parser.parse_args()
     cfg = Settings()
