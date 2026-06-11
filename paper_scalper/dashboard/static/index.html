@@ -386,17 +386,19 @@ async function refresh() {
     <div class="pos-row"><span class="k">Opened</span><span class="v">${hms(p.entry_ts)}</span></div>`;
 
   /* mini trades + full table */
-  if (trades.length) {
-    $("mini-trades").innerHTML = `<table>${tradeHead(false)}<tbody>${tradeRows(trades.slice(0, 8), false)}</tbody></table>`;
-    $("trades-table").innerHTML = `<table>${tradeHead(true)}<tbody>${tradeRows(trades, true)}</tbody></table>`;
-    $("trades-count").textContent = `${trades.length} shown · newest first`;
-  }
+  const noTrades = '<div class="empty">No trades yet — observing the market…</div>';
+  $("mini-trades").innerHTML = trades.length
+    ? `<table>${tradeHead(false)}<tbody>${tradeRows(trades.slice(0, 8), false)}</tbody></table>` : noTrades;
+  $("trades-table").innerHTML = trades.length
+    ? `<table>${tradeHead(true)}<tbody>${tradeRows(trades, true)}</tbody></table>` : noTrades;
+  $("trades-count").textContent = trades.length ? `${trades.length} shown · newest first` : "";
 
   /* signal feed */
-  if (signals.length) $("feed").innerHTML = signals.map(x => `<div class="feed-item">
+  $("feed").innerHTML = signals.length ? signals.map(x => `<div class="feed-item">
     <span class="t">${hms(x.ts)}</span>
     <span class="k-${x.kind}" style="flex:none;font-weight:600">${x.kind === "signal" ? "ENTRY" : x.kind === "risk_block" ? "BLOCKED" : "skip"}</span>
-    <span class="d">${x.detail}</span></div>`).join("");
+    <span class="d">${x.detail}</span></div>`).join("")
+    : '<div class="empty">Waiting for candles… (indicators warm up for ~22 minutes)</div>';
 
   /* reports */
   $("report-kpis").innerHTML =
@@ -405,6 +407,7 @@ async function refresh() {
     kpiCard("Expectancy / trade", s.trades ? signed(s.net_pnl / s.trades) : "—", s.trades ? cls(s.net_pnl) : "") +
     kpiCard("Fee drag", s.gross_pnl ? fmt(s.total_fees / Math.abs(s.gross_pnl) * 100, 0) + "%" : "—", "", "fees vs |gross|") +
     kpiCard("Days traded", daily.length);
+  $("daily-table").innerHTML = '<div class="empty">No closed trades yet.</div>';
   if (daily.length) $("daily-table").innerHTML = `<table><thead><tr>
       <th>Date (UTC)</th><th>Trades</th><th>Win %</th><th>Gross $</th><th>Fees $</th><th>Net $</th>
     </tr></thead><tbody>${daily.map(d => `<tr>
