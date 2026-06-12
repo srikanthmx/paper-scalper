@@ -186,6 +186,81 @@ tbody tr:hover { background: rgba(110,168,255,.04); }
 .diag h3 { font-size: 12px; margin-bottom: 6px; }
 .diag li { margin-left: 18px; padding: 2px 0; font-size: 12.5px; color: var(--muted); }
 footer { text-align: center; color: var(--faint); font-size: 11.5px; padding: 24px; }
+
+/* ───── tune (redesigned) ───── */
+.tune-layout { display: grid; grid-template-columns: 200px 1fr; gap: 12px; }
+@media (max-width: 900px) { .tune-layout { grid-template-columns: 1fr; } }
+.tune-side { display: flex; flex-direction: column; gap: 6px; }
+.tune-side button {
+  display: flex; align-items: center; gap: 8px; background: var(--panel-2);
+  border: 1px solid var(--border-soft); color: var(--muted); font: inherit;
+  font-weight: 600; padding: 12px 14px; border-radius: 12px; cursor: pointer;
+  text-align: left; transition: all .15s;
+}
+.tune-side button:hover { color: var(--text); border-color: var(--border); }
+.tune-side button.active { color: var(--text); border-color: var(--accent); background: rgba(110,168,255,.07); }
+.tune-side .vtag { margin-left: auto; font-size: 10.5px; color: var(--faint); font-family: var(--mono); }
+.presets { display: flex; gap: 8px; padding: 12px 16px 2px; flex-wrap: wrap; align-items: center; }
+.presets .plabel { font-size: 11px; color: var(--faint); font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+.chip2 {
+  background: var(--panel); border: 1px solid var(--border); color: var(--muted);
+  font: inherit; font-size: 12px; font-weight: 600; padding: 6px 13px;
+  border-radius: 999px; cursor: pointer; transition: all .15s;
+}
+.chip2:hover { color: var(--text); border-color: var(--accent); }
+.pgroup { padding: 8px 16px 2px; }
+.pgroup h4 {
+  font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
+  color: var(--accent); margin: 10px 0 10px; display: flex; align-items: center; gap: 8px;
+}
+.pgroup h4::after { content: ""; flex: 1; height: 1px; background: var(--border-soft); }
+.pgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); gap: 12px; }
+.pfield { background: var(--panel); border: 1px solid var(--border-soft); border-radius: 12px; padding: 10px 12px; }
+.pfield.dirty { border-color: var(--amber); }
+.pfield .plab { font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 2px; }
+.pfield .pdesc { font-size: 10.5px; color: var(--faint); margin-bottom: 8px; min-height: 13px; }
+.pfield .prow { display: flex; gap: 10px; align-items: center; }
+.pfield input[type=range] { flex: 1; accent-color: var(--accent); }
+.pfield input[type=number] {
+  width: 76px; background: var(--bg); border: 1px solid var(--border); color: var(--text);
+  font-family: var(--mono); font-size: 12.5px; padding: 5px 7px; border-radius: 7px;
+}
+.pfield input[type=number]:focus { outline: none; border-color: var(--accent); }
+.pfield .ptoggle { width: 40px; height: 22px; border-radius: 99px; background: var(--border); position: relative; cursor: pointer; transition: background .15s; border: none; }
+.pfield .ptoggle.on { background: var(--accent); }
+.pfield .ptoggle::after { content: ""; position: absolute; top: 2.5px; left: 3px; width: 17px; height: 17px; border-radius: 50%; background: #e6edf3; transition: left .15s; }
+.pfield .ptoggle.on::after { left: 20px; }
+
+/* ───── research page ───── */
+.status-banner {
+  display: flex; gap: 10px; align-items: center; padding: 12px 16px; border-radius: 12px;
+  border: 1px solid var(--border-soft); background: var(--panel-2); margin-bottom: 12px;
+  font-size: 13px; color: var(--muted);
+}
+.status-banner .sdot { width: 9px; height: 9px; border-radius: 50%; background: var(--faint); flex: none; }
+.status-banner.running .sdot { background: var(--amber); animation: pulse 1.2s infinite; }
+.status-banner.ready .sdot { background: var(--green); }
+.status-banner.error .sdot { background: var(--red); }
+.rc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 12px; }
+.rc-card {
+  background: linear-gradient(180deg, var(--panel-2), var(--panel));
+  border: 1px solid var(--border-soft); border-radius: 16px; padding: 16px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.rc-card.deployed { border-color: rgba(46,230,168,.45); }
+.rc-head { display: flex; align-items: center; gap: 8px; }
+.rc-head .nm { font-weight: 700; font-size: 14.5px; }
+.rc-head a { color: var(--faint); font-size: 11.5px; text-decoration: none; margin-left: auto; }
+.rc-head a:hover { color: var(--accent); }
+.rc-rules { font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+.stat-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.stat-chip {
+  background: var(--bg); border: 1px solid var(--border-soft); border-radius: 8px;
+  padding: 5px 9px; font-size: 11px; font-family: var(--mono); color: var(--muted);
+}
+.stat-chip b { color: var(--text); font-weight: 600; }
+.rc-note { font-size: 11px; color: var(--faint); font-style: italic; }
+.rc-actions { display: flex; gap: 8px; align-items: center; margin-top: auto; }
 </style>
 </head>
 <body>
@@ -207,6 +282,7 @@ footer { text-align: center; color: var(--faint); font-size: 11.5px; padding: 24
     <button data-tab="trades">Trades</button>
     <button data-tab="reports">Reports</button>
     <button data-tab="tune">Tune</button>
+    <button data-tab="research">Research</button>
   </nav>
   <div class="sep"></div>
   <div class="strats" id="strats">
@@ -293,7 +369,37 @@ footer { text-align: center; color: var(--faint); font-size: 11.5px; padding: 24
 
   <!-- ════ TUNE ════ -->
   <section class="tab" id="tab-tune">
-    <div class="grid" id="tune-cards"></div>
+    <div class="tune-layout">
+      <div class="tune-side" id="tune-side"></div>
+      <div>
+        <div class="card" id="tune-panel"></div>
+        <div class="card" style="margin-top:12px">
+          <div class="card-h">Version history <span class="hint">every save = a version · trades are tagged with the version they ran under</span></div>
+          <div id="tune-history"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════ RESEARCH ════ -->
+  <section class="tab" id="tab-research">
+    <div class="status-banner" id="research-status"><span class="sdot"></span>
+      <span id="research-status-text">loading…</span>
+      <span class="spacer"></span>
+      <button class="btn" id="research-run">Run research now</button>
+    </div>
+    <div class="grid" style="margin-bottom:12px">
+      <div class="card span12">
+        <div class="card-h">Currently deployed in the Daily lane</div>
+        <div class="pos-body" id="research-current">—</div>
+      </div>
+    </div>
+    <h2 style="font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:6px 0 10px">Candidates <span style="color:var(--faint);font-weight:500;text-transform:none;letter-spacing:0">— backtest figures are as published by their sources, not verified locally</span></h2>
+    <div class="rc-grid" id="research-cards"><div class="empty">No candidates yet — hit “Run research now”.</div></div>
+    <div class="card" style="margin-top:14px">
+      <div class="card-h">Deployment history (Daily lane)</div>
+      <div id="research-history"></div>
+    </div>
   </section>
 
   <footer>paper-scalper · simulated fills only · no broker order APIs exist in this codebase</footer>
@@ -562,67 +668,228 @@ async function refresh() {
      <ul>${notes.map(x => `<li>${x}</li>`).join("")}</ul></div>`).join("");
 }
 
-/* ── Tune tab: live param editing with internal versioning ── */
+/* ── Tune tab: grouped, labeled param editor with presets + versioning ── */
+const META = {
+  vol_spike_mult:        { l: "Volume spike ×", g: "Entry", d: "candle volume vs 20-bar average", min: 1, max: 3, step: 0.05 },
+  momo_vol_mult:         { l: "Volume confirm ×", g: "Entry", d: "breakout candle volume vs average", min: 1, max: 3, step: 0.05 },
+  rsi_long_min:          { l: "Long RSI ≥", g: "Entry", d: "lower RSI bound for longs", min: 0, max: 100, step: 1 },
+  rsi_long_max:          { l: "Long RSI ≤", g: "Entry", d: "upper RSI bound for longs", min: 0, max: 100, step: 1 },
+  rsi_short_min:         { l: "Short RSI ≥", g: "Entry", d: "lower RSI bound for shorts", min: 0, max: 100, step: 1 },
+  rsi_short_max:         { l: "Short RSI ≤", g: "Entry", d: "upper RSI bound for shorts", min: 0, max: 100, step: 1 },
+  ema_sep_min_bps:       { l: "Trend separation (bps)", g: "Entry", d: "EMA9−EMA21 gap required", min: 0, max: 10, step: 0.1 },
+  pullback_tolerance_pct:{ l: "Pullback touch (%)", g: "Entry", d: "how close price must come to EMA9", min: 0, max: 0.5, step: 0.01 },
+  mr_rsi_low:            { l: "Oversold RSI ≤", g: "Entry", d: "fade longs at/below this RSI", min: 5, max: 50, step: 1 },
+  mr_rsi_high:           { l: "Overbought RSI ≥", g: "Entry", d: "fade shorts at/above this RSI", min: 50, max: 95, step: 1 },
+  mr_vwap_atr_mult:      { l: "VWAP stretch (ATRs)", g: "Entry", d: "distance from VWAP to fade", min: 0, max: 3, step: 0.1 },
+  st_mult:               { l: "Supertrend band (ATRs)", g: "Entry", d: "band width — smaller flips more often", min: 0.5, max: 5, step: 0.1 },
+  require_trend_close:   { l: "Close with trend", g: "Entry", d: "off = enter on any candle on the trend side", toggle: true },
+  min_atr_pct:           { l: "Min ATR (%)", g: "Filters", d: "skip dead chop below this", min: 0, max: 0.2, step: 0.001 },
+  max_atr_pct:           { l: "Max ATR (%)", g: "Filters", d: "skip news spikes above this", min: 0.1, max: 3, step: 0.05 },
+  max_spread_bps:        { l: "Max spread (bps)", g: "Filters", d: "skip when book is too wide", min: 1, max: 50, step: 1 },
+  sl_atr_mult:           { l: "Stop = ATR ×", g: "Exit", d: "initial stop distance", min: 0.2, max: 4, step: 0.1 },
+  tp_atr_mult:           { l: "Target = ATR ×", g: "Exit", d: "take-profit distance", min: 0.2, max: 6, step: 0.1 },
+  sl_min_pct:            { l: "Stop floor (%)", g: "Exit", d: "stop never tighter than this", min: 0.02, max: 1, step: 0.01 },
+  sl_max_pct:            { l: "Stop cap (%)", g: "Exit", d: "stop never wider than this", min: 0.1, max: 2, step: 0.05 },
+  tp_min_pct:            { l: "Target floor (%)", g: "Exit", d: "TP never closer than this", min: 0.05, max: 2, step: 0.05 },
+  tp_max_pct:            { l: "Target cap (%)", g: "Exit", d: "TP never further than this", min: 0.1, max: 3, step: 0.05 },
+  rr:                    { l: "Risk : Reward", g: "Exit", d: "TP1 placed at R × this", min: 1, max: 5, step: 0.25 },
+  scale_out_frac:        { l: "Scale-out fraction", g: "Exit", d: "portion closed at TP1", min: 0.1, max: 0.9, step: 0.05 },
+  max_hold_seconds:      { l: "Max hold (sec)", g: "Exit", d: "time-based exit", min: 60, max: 7200, step: 30 },
+};
+const PRESETS = {
+  pullback: { Conservative: { vol_spike_mult: 1.5, rsi_long_min: 45, rsi_long_max: 65, rsi_short_min: 35, rsi_short_max: 55, ema_sep_min_bps: 2, min_atr_pct: 0.03 },
+              Aggressive:   { vol_spike_mult: 1.05, rsi_long_min: 35, rsi_long_max: 80, rsi_short_min: 20, rsi_short_max: 65, ema_sep_min_bps: 0.5, min_atr_pct: 0.01 } },
+  momo:     { Conservative: { momo_vol_mult: 1.4, sl_atr_mult: 1.2, tp_atr_mult: 2.2 },
+              Aggressive:   { momo_vol_mult: 1.0, sl_atr_mult: 0.8, tp_atr_mult: 1.5 } },
+  meanrev:  { Conservative: { mr_rsi_low: 25, mr_rsi_high: 75, mr_vwap_atr_mult: 1.2 },
+              Aggressive:   { mr_rsi_low: 38, mr_rsi_high: 62, mr_vwap_atr_mult: 0.5 } },
+  trend:    { Conservative: { ema_sep_min_bps: 2, sl_min_pct: 0.2, min_atr_pct: 0.03, require_trend_close: 1 },
+              Aggressive:   { ema_sep_min_bps: 0.3, sl_min_pct: 0.05, min_atr_pct: 0.003, require_trend_close: 0 } },
+};
+let tuneStrat = "pullback", tuneCfgs = null, tuneStats = null;
+
 async function loadTune() {
-  const [cfgs, vstats] = await Promise.all([
+  [tuneCfgs, tuneStats] = await Promise.all([
     fetch("/api/params").then(r => r.json()),
     fetch("/api/versions").then(r => r.json()),
   ]);
-  $("tune-cards").innerHTML = Object.entries(cfgs).map(([name, c]) => {
-    const fields = Object.entries(c.params).map(([k, v]) => `
-      <div class="tune-field"><label>${k}</label>
-        <input type="number" step="any" data-strat="${name}" data-key="${k}"
-               value="${v}" data-orig="${v}"></div>`).join("");
-    const stats = vstats.filter(s => s.strategy === name);
-    const hist = (c.history || []).map(h => {
+  renderTune();
+}
+
+function renderTune() {
+  const cfgs = tuneCfgs;
+  $("tune-side").innerHTML = Object.keys(cfgs).map(n => `
+    <button class="${n === tuneStrat ? "active" : ""}" data-ts="${n}">
+      <span class="pill ${n}">${STRAT_LETTER[n]}</span> ${STRAT_NAME[n]}
+      <span class="vtag">v${cfgs[n].version}</span></button>`).join("");
+  document.querySelectorAll("#tune-side button").forEach(b =>
+    b.onclick = () => { tuneStrat = b.dataset.ts; renderTune(); });
+
+  const c = cfgs[tuneStrat];
+  const groups = { Entry: [], Filters: [], Exit: [], Other: [] };
+  for (const [k, v] of Object.entries(c.params)) {
+    const m = META[k] || { l: k, g: "Other", d: "" };
+    (groups[m.g] = groups[m.g] || []).push(field(k, v, m));
+  }
+  const presets = PRESETS[tuneStrat];
+  $("tune-panel").innerHTML = `
+    <div class="card-h"><span class="pill ${tuneStrat}">${STRAT_NAME[tuneStrat]}</span>
+      active v${c.version}<span class="hint">changes apply on the next candle</span></div>
+    <div class="presets"><span class="plabel">Presets</span>
+      ${presets ? Object.keys(presets).map(p => `<button class="chip2" data-preset="${p}">${p}</button>`).join("") : ""}
+      <button class="chip2" id="preset-reset">Reset to active</button></div>
+    ${Object.entries(groups).filter(([, f]) => f.length).map(([g, f]) =>
+      `<div class="pgroup"><h4>${g}</h4><div class="pgrid">${f.join("")}</div></div>`).join("")}
+    <div class="tune-actions">
+      <input type="text" id="tune-note" placeholder="what are you testing? (saved with the version)">
+      <button class="btn" id="tune-save">Save as v${c.version + 1}</button>
+      <span class="save-msg" id="tune-msg"></span>
+    </div>`;
+
+  const stats = tuneStats.filter(s => s.strategy === tuneStrat);
+  $("tune-history").innerHTML = `<table><thead><tr><th>Ver</th><th>Note</th><th>Trades</th>
+    <th>Win %</th><th>Net $</th><th>Avg $/trade</th></tr></thead><tbody>
+    ${(c.history || []).map(h => {
       const st = stats.find(s => s.version === h.version) || {};
       const active = h.version === c.version;
       return `<tr${active ? ' style="background:rgba(110,168,255,.06)"' : ""}>
         <td>v${h.version}${active ? " ●" : ""}</td>
-        <td style="text-align:left">${h.note || "—"}</td>
+        <td style="text-align:left;white-space:normal">${h.note || "—"}</td>
         <td>${st.trades || 0}</td>
         <td>${st.trades ? fmt(st.wins / st.trades * 100, 0) + "%" : "—"}</td>
         <td class="${cls(st.net_pnl || 0)}">${st.net_pnl == null ? "—" : fmt(st.net_pnl)}</td>
-        <td class="${cls(st.expectancy || 0)}">${st.expectancy == null ? "—" : fmt(st.expectancy)}</td>
-      </tr>`;
-    }).join("");
-    return `<div class="card span6">
-      <div class="card-h"><span class="pill ${name}">${STRAT_NAME[name]}</span>
-        active v${c.version}
-        <span class="hint">applies on the next candle · trades are tagged per version</span></div>
-      <div class="tune-grid">${fields}</div>
-      <div class="tune-actions">
-        <input type="text" id="note-${name}" placeholder="what are you testing? (saved with the version)">
-        <button class="btn" data-save="${name}">Save as v${c.version + 1}</button>
-        <span class="save-msg" id="msg-${name}"></span>
-      </div>
-      <div class="card-h">Version history</div>
-      <table><thead><tr><th>Ver</th><th>Note</th><th>Trades</th><th>Win %</th>
-        <th>Net $</th><th>Avg $/trade</th></tr></thead>
-        <tbody>${hist || '<tr><td colspan="6" class="empty">—</td></tr>'}</tbody></table>
-    </div>`;
-  }).join("");
+        <td class="${cls(st.expectancy || 0)}">${st.expectancy == null ? "—" : fmt(st.expectancy)}</td></tr>`;
+    }).join("") || '<tr><td colspan="6" class="empty">—</td></tr>'}</tbody></table>`;
 
-  document.querySelectorAll("#tune-cards input[type=number]").forEach(inp =>
-    inp.oninput = () => inp.classList.toggle("dirty", inp.value !== inp.dataset.orig));
-  document.querySelectorAll("#tune-cards button[data-save]").forEach(btn =>
-    btn.onclick = async () => {
-      const name = btn.dataset.save;
-      const params = {};
-      document.querySelectorAll(`#tune-cards input[data-strat="${name}"]`).forEach(inp => {
-        if (inp.value !== inp.dataset.orig) params[inp.dataset.key] = Number(inp.value);
-      });
-      if (!Object.keys(params).length) { $("msg-" + name).textContent = "no changes"; return; }
-      btn.disabled = true;
-      const res = await fetch("/api/params", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ strategy: name, params, note: $("note-" + name).value }),
-      }).then(r => r.json());
-      $("msg-" + name).textContent = res.version ? `saved v${res.version} ✓` : "error";
-      setTimeout(loadTune, 800);
+  wireTunePanel(presets);
+}
+
+function field(k, v, m) {
+  if (m.toggle) return `<div class="pfield" data-pf="${k}" data-orig="${v}">
+    <div class="plab">${m.l}</div><div class="pdesc">${m.d}</div>
+    <div class="prow"><button class="ptoggle ${v ? "on" : ""}" data-key="${k}"></button></div></div>`;
+  const min = m.min ?? 0, max = m.max ?? Math.max(v * 3, 1), step = m.step ?? "any";
+  return `<div class="pfield" data-pf="${k}" data-orig="${v}">
+    <div class="plab">${m.l}</div><div class="pdesc">${m.d}</div>
+    <div class="prow">
+      <input type="range" min="${min}" max="${max}" step="${step}" value="${v}" data-key="${k}">
+      <input type="number" step="any" value="${v}" data-key="${k}">
+    </div></div>`;
+}
+
+function wireTunePanel(presets) {
+  const panel = $("tune-panel");
+  const sync = (k, val) => {
+    const pf = panel.querySelector(`.pfield[data-pf="${k}"]`);
+    pf.querySelectorAll("input").forEach(i => i.value = val);
+    pf.classList.toggle("dirty", String(val) !== pf.dataset.orig);
+  };
+  panel.querySelectorAll(".pfield input").forEach(inp =>
+    inp.oninput = () => sync(inp.dataset.key, inp.value));
+  panel.querySelectorAll(".ptoggle").forEach(t => t.onclick = () => {
+    t.classList.toggle("on");
+    const pf = t.closest(".pfield");
+    pf.classList.toggle("dirty", String(t.classList.contains("on") ? 1 : 0) !== pf.dataset.orig);
+  });
+  panel.querySelectorAll("[data-preset]").forEach(b => b.onclick = () => {
+    for (const [k, v] of Object.entries(presets[b.dataset.preset])) {
+      const pf = panel.querySelector(`.pfield[data-pf="${k}"]`);
+      if (!pf) continue;
+      const tog = pf.querySelector(".ptoggle");
+      if (tog) { tog.classList.toggle("on", !!v); pf.classList.toggle("dirty", String(v) !== pf.dataset.orig); }
+      else sync(k, v);
+    }
+  });
+  panel.querySelector("#preset-reset").onclick = renderTune;
+  panel.querySelector("#tune-save").onclick = async () => {
+    const params = {};
+    panel.querySelectorAll(".pfield.dirty").forEach(pf => {
+      const k = pf.dataset.pf;
+      const tog = pf.querySelector(".ptoggle");
+      params[k] = tog ? (tog.classList.contains("on") ? 1 : 0)
+                      : Number(pf.querySelector("input[type=number]").value);
     });
+    if (!Object.keys(params).length) { $("tune-msg").textContent = "no changes"; return; }
+    const res = await fetch("/api/params", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ strategy: tuneStrat, params, note: $("tune-note").value }),
+    }).then(r => r.json());
+    $("tune-msg").textContent = res.version ? `saved v${res.version} ✓ (live next candle)` : "error";
+    setTimeout(loadTune, 900);
+  };
 }
 document.querySelector('nav button[data-tab="tune"]').addEventListener("click", loadTune);
+
+/* ── Research page: candidates with published backtests, one-click deploy ── */
+async function loadResearch() {
+  const r = await fetch("/api/research").then(x => x.json());
+  const st = r.status || {};
+  const banner = $("research-status");
+  banner.className = "status-banner " +
+    (["requested", "running", "deploy_requested", "deploying"].includes(st.state) ? "running"
+     : st.state === "ready" || st.state === "deployed" ? "ready"
+     : st.state === "error" ? "error" : "");
+  const age = st.ts ? (Date.now() / 1000 - st.ts) : 0;
+  let text = st.detail || "idle — no research run yet";
+  if (["requested", "deploy_requested"].includes(st.state) && age > 240)
+    text += " · agent seems offline — make sure the Claude Code session is running";
+  $("research-status-text").textContent = text;
+  $("research-run").disabled =
+    ["requested", "running", "deploy_requested", "deploying"].includes(st.state);
+
+  const cur = r.current || {};
+  $("research-current").innerHTML = cur.name
+    ? `<div class="pos-row"><span class="k">Algorithm</span><span class="v">${cur.name}</span></div>
+       <div class="pos-row"><span class="k">Rules</span><span class="v" style="white-space:normal;text-align:right;max-width:70%">${cur.rules || "—"}</span></div>
+       <div class="pos-row"><span class="k">Deployed</span><span class="v">${cur.deployed_at ? new Date(cur.deployed_at * 1000).toLocaleString() : "—"}</span></div>`
+    : '<div class="empty" style="padding:10px">Seed algorithm: Supertrend(10,2) — run research to find a better one.</div>';
+
+  const cards = r.candidates || [];
+  $("research-cards").innerHTML = cards.length ? cards.map(c => {
+    const bt = c.backtest || {};
+    const chips = [
+      ["Win rate", bt.win_rate], ["Profit factor", bt.profit_factor],
+      ["Net return", bt.net_return], ["Max DD", bt.max_dd],
+      ["Trades", bt.trades], ["Market/TF", bt.market],
+    ].filter(([, v]) => v != null)
+     .map(([l, v]) => `<span class="stat-chip">${l} <b>${v}</b></span>`).join("");
+    return `<div class="rc-card ${c.status === "deployed" ? "deployed" : ""}">
+      <div class="rc-head"><span class="nm">${c.name}</span>
+        ${c.source_url ? `<a href="${c.source_url}" target="_blank">${new URL(c.source_url).hostname} ↗</a>` : ""}</div>
+      <div class="rc-rules">${c.rules}</div>
+      <div class="stat-chips">${chips || '<span class="rc-note">no published backtest found</span>'}</div>
+      ${bt.source_note ? `<div class="rc-note">backtest: ${bt.source_note}</div>` : ""}
+      ${c.suitability ? `<div class="rc-note">fit: ${c.suitability}</div>` : ""}
+      <div class="rc-actions">
+        ${c.status === "deployed" ? '<span class="pill long">deployed</span>'
+          : `<button class="btn" data-deploy="${c.id}">Deploy to Daily lane</button>`}
+      </div></div>`;
+  }).join("") : '<div class="empty">No candidates yet — hit “Run research now”.</div>';
+
+  document.querySelectorAll("[data-deploy]").forEach(b => b.onclick = async () => {
+    b.disabled = true;
+    await fetch("/api/research/deploy", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: b.dataset.deploy }),
+    });
+    loadResearch();
+  });
+
+  $("research-history").innerHTML = `<table><thead><tr><th>Ver</th><th>Algorithm / note</th>
+    <th>When</th></tr></thead><tbody>${(r.history || []).map(h => `<tr>
+    <td>v${h.version}</td><td style="text-align:left;white-space:normal">${h.note || "initial defaults"}</td>
+    <td>${new Date(h.created_ts * 1000).toLocaleString()}</td></tr>`).join("")
+    || '<tr><td colspan="3" class="empty">—</td></tr>'}</tbody></table>`;
+}
+$("research-run").onclick = async () => {
+  $("research-run").disabled = true;
+  await fetch("/api/research/run", { method: "POST" });
+  loadResearch();
+};
+document.querySelector('nav button[data-tab="research"]').addEventListener("click", loadResearch);
+setInterval(() => {
+  if (document.querySelector("#tab-research").classList.contains("active")) loadResearch();
+}, 5000);
 
 refresh();
 setInterval(refresh, 3000);

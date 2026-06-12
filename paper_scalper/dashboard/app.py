@@ -6,6 +6,8 @@ or: python -m paper_scalper.dashboard.app
 
 from __future__ import annotations
 
+import json
+import time
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -167,6 +169,66 @@ def versions() -> list[dict]:
     j = _journal()
     try:
         return j.version_stats()
+    finally:
+        j.close()
+
+
+REQUESTS_LOG = Path(__file__).resolve().parents[2] / "research_requests.log"
+
+
+class DeployBody(BaseModel):
+    id: str
+
+
+def _request_agent(action: str, payload: dict) -> None:
+    """Signal the local research agent (a Claude session watching this file)."""
+    line = json.dumps({"action": action, "ts": time.time(), **payload})
+    with REQUESTS_LOG.open("a") as fh:
+        fh.write(line + "\n")
+
+
+@app.get("/api/research")
+def research() -> dict:
+    j = _journal()
+    try:
+        return {
+            "status": j.get_state("research:status") or {"state": "idle"},
+            "candidates": j.get_state("research:candidates") or [],
+            "current": j.get_state("research:current") or {},
+            "history": j.param_versions("daily")[:10],
+            "agent_seen": j.get_state("research:agent_heartbeat"),
+        }
+    finally:
+        j.close()
+
+
+@app.post("/api/research/run")
+def research_run() -> dict:
+    j = _journal()
+    try:
+        j.set_state("research:status",
+                     {"state": "requested", "ts": time.time(),
+                      "detail": "research requested — agent will pick it up shortly"})
+        _request_agent("research", {})
+        return {"ok": True}
+    finally:
+        j.close()
+
+
+@app.post("/api/research/deploy")
+def research_deploy(body: DeployBody) -> dict:
+    j = _journal()
+    try:
+        candidates = j.get_state("research:candidates") or []
+        chosen = next((c for c in candidates if c.get("id") == body.id), None)
+        if chosen is None:
+            return {"error": f"unknown candidate {body.id}"}
+        j.set_state("research:status",
+                     {"state": "deploy_requested", "ts": time.time(),
+                      "detail": f"deploying {chosen['name']} — agent will implement, "
+                                "test and restart the runner"})
+        _request_agent("deploy", {"id": body.id, "name": chosen["name"]})
+        return {"ok": True, "chosen": chosen["name"]}
     finally:
         j.close()
 
