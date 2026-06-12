@@ -32,7 +32,7 @@ class MomentumStrategy(TunableParams):
             "max_atr_pct": cfg.max_atr_pct,
             "max_spread_bps": cfg.max_spread_bps,
             "sl_atr_mult": 1.0,
-            "tp_atr_mult": 1.8,
+            "tp_atr_mult": 2.0,  # strict 1:2
             "sl_min_pct": 0.20,
             "sl_max_pct": 0.50,
             "tp_min_pct": 0.35,

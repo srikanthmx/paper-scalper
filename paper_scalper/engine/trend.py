@@ -3,10 +3,10 @@
 Entry: any candle closing with the trend while EMA9 is beyond EMA21 — tuned to
 take the smallest opportunity (tiny separation floor, tiny ATR floor, small 1R).
 
-Exit (broker scale_trail mode):
-- initial SL at 1R (1x ATR, clamped small)
-- at +2R: close half, jump SL to +1R (a stop-out from here is still a winner)
-- trail the remaining half by 1R off the best price
+Exit (broker scale_trail mode — the 1:2 ladder):
+- initial SL at 1R (1x ATR, clamped small), TP1 at +2R
+- +2R hit: close half, SL moves to ENTRY (breakeven), new TP at +4R
+- each further rung: close half of the rest, SL trails to the previous TP
 
 Tunable params (self.p) are hot-reloadable from the dashboard.
 """

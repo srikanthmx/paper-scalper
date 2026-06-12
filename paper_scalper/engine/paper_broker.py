@@ -7,8 +7,10 @@ the no-network property.
 
 Two execution modes per position (set by the entry signal):
 - "simple":      full exit at SL / TP / breakeven / max-hold
-- "scale_trail": at TP (e.g. +2R) close scale_out_frac of the position, jump the
-                 stop to +1R, then trail the remainder by 1R off the best price
+- "scale_trail": the 1:2 ladder — at +2R close scale_out_frac, SL jumps to entry
+                 (breakeven), new TP set 2R further (+4R); each later TP closes
+                 another fraction, SL trails to the previous TP. The stop always
+                 sits two rungs behind the target.
 
 Marking convention (learned from live losses): exit LEVELS are anchored to the
 quote MID at entry and TRIGGERED by the current mid — otherwise the spread rigs
@@ -41,8 +43,7 @@ class Position:
     max_hold_seconds: int = 300
     mid_ref: float = 0.0         # quote mid at entry — anchor for all exit levels
     r_dist: float = 0.0          # initial risk distance in mid terms
-    tp1_filled: bool = False
-    best_px: float = 0.0         # best mid since TP1 (trailing anchor)
+    tp_hits: int = 0             # ladder rungs filled (scale_trail mode)
     breakeven_armed: bool = False
 
     def unrealized(self, quote: Quote) -> float:
@@ -130,23 +131,22 @@ class PaperBroker:
 
     def _on_quote_scale_trail(self, quote: Quote, pos: Position, mark: float,
                               sign: float) -> ClosedTrade | None:
-        if not pos.tp1_filled:
-            if sign * (mark - pos.tp_price) >= 0:
-                # take scale_out_frac off at TP1, stop jumps to +1R, start trailing
-                trade = self._close_fraction(quote, pos.scale_out_frac, "partial_tp")
-                pos.tp1_filled = True
-                pos.best_px = mark
-                pos.sl_price = pos.mid_ref + sign * pos.r_dist  # lock +1R (mid terms)
-                return trade
-            if sign * (mark - pos.sl_price) <= 0:
-                return self._close(quote, "stop_loss")
-        else:
-            # trail the remainder by 1R off the best price; never loosen the stop
-            pos.best_px = max(pos.best_px, mark) if sign > 0 else min(pos.best_px, mark)
-            trail = pos.best_px - sign * pos.r_dist
-            pos.sl_price = max(pos.sl_price, trail) if sign > 0 else min(pos.sl_price, trail)
-            if sign * (mark - pos.sl_price) <= 0:
-                return self._close(quote, "trailing_stop")
+        if sign * (mark - pos.tp_price) >= 0:
+            # rung filled: close a fraction, SL trails to the previous rung,
+            # next TP goes one rung (2R) further out
+            if pos.tp_hits == 0:
+                step = sign * (pos.tp_price - pos.mid_ref)  # rr * r_dist
+            else:
+                step = sign * (pos.tp_price - pos.sl_price) / 2
+            trade = self._close_fraction(quote, pos.scale_out_frac, "partial_tp")
+            pos.tp_hits += 1
+            # SL: entry after rung 1 ("same price as bought"), then previous TP
+            pos.sl_price = pos.mid_ref + sign * (pos.tp_hits - 1) * step
+            pos.tp_price = pos.mid_ref + sign * (pos.tp_hits + 1) * step
+            return trade
+        if sign * (mark - pos.sl_price) <= 0:
+            reason = "trailing_stop" if pos.tp_hits > 0 else "stop_loss"
+            return self._close(quote, reason)
         if quote.ts - pos.entry_ts >= pos.max_hold_seconds:
             return self._close(quote, "max_hold")
         return None
