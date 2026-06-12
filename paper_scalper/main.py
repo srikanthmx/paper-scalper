@@ -25,6 +25,7 @@ from paper_scalper.engine.momentum import MomentumStrategy
 from paper_scalper.engine.paper_broker import ClosedTrade, PaperBroker
 from paper_scalper.engine.risk import RiskManager
 from paper_scalper.engine.strategy import Signal, Snapshot, Strategy
+from paper_scalper.engine.trend import TrendScalpStrategy
 from paper_scalper.storage.db import Journal
 
 log = logging.getLogger("paper_scalper")
@@ -40,7 +41,8 @@ class StrategyProtocol(Protocol):
 
 
 def build_strategies(cfg: Settings) -> list[StrategyProtocol]:
-    return [Strategy(cfg), MomentumStrategy(cfg), MeanReversionStrategy(cfg)]
+    return [Strategy(cfg), MomentumStrategy(cfg), MeanReversionStrategy(cfg),
+            TrendScalpStrategy(cfg)]
 
 
 class Lane:

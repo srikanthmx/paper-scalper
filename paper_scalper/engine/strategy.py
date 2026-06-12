@@ -29,6 +29,11 @@ class Signal:
     sl_pct: float  # stop distance as % of entry
     tp_pct: float  # target distance as % of entry
     reason: str
+    # execution mode: "simple" = full exit at SL/TP/hold;
+    # "scale_trail" = close scale_out_frac at TP, SL jumps to +1R, rest trails by 1R
+    mode: str = "simple"
+    scale_out_frac: float = 0.5
+    max_hold_seconds: int | None = None  # per-signal override of cfg.max_hold_seconds
 
 
 @dataclass(slots=True)

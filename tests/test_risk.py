@@ -10,7 +10,8 @@ TS = 1_700_000_000.0
 
 def manager(**overrides) -> RiskManager:
     base = dict(starting_equity=10_000.0, daily_stop_pct=2.0, max_consecutive_losses=3,
-                cooldown_candles=2, risk_per_trade_pct=0.5, max_notional_fraction=0.5)
+                cooldown_candles=2, risk_per_trade_pct=0.5, max_notional_fraction=0.5,
+                enable_risk_halts=True)  # these tests exercise the halt logic
     base.update(overrides)
     return RiskManager(Settings(**base))
 

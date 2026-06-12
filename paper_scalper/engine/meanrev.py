@@ -62,6 +62,7 @@ class MeanReversionStrategy:
         return Signal(
             side=side, ts=candle.ts_open + cfg.candle_seconds, ref_price=px,
             sl_pct=sl_pct, tp_pct=tp_pct,
+            max_hold_seconds=cfg.mr_max_hold_seconds,  # fades revert slower than scalps
             reason=(f"{side} fade: rsi {rsi:.1f}, px {px:.2f} vs vwap {vwap:.2f} "
                     f"({(px - vwap) / atr:+.2f} atr), atr {atr_pct:.3f}%"),
         )

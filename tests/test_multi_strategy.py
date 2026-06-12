@@ -85,7 +85,8 @@ def test_lanes_trade_independently(tmp_path) -> None:
     """One lane's halt must not block another lane."""
     from paper_scalper.engine.risk import RiskManager
 
-    settings = Settings(max_consecutive_losses=1, cooldown_candles=0)
+    settings = Settings(max_consecutive_losses=1, cooldown_candles=0,
+                        enable_risk_halts=True)
     risk_a, risk_b = RiskManager(settings), RiskManager(settings)
     risk_a.on_trade_closed(-10.0, 1_700_000_000.0)
     assert risk_a.halted_reason is not None

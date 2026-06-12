@@ -35,6 +35,8 @@ class RiskManager:
 
     def can_enter(self, ts: float) -> RiskDecision:
         self._roll_day(ts)
+        if not self.cfg.enable_risk_halts:
+            return RiskDecision(True, "ok (learning mode, halts disabled)")
         if self.halted_reason:
             return RiskDecision(False, self.halted_reason)
         if self._cooldown > 0:
@@ -63,6 +65,8 @@ class RiskManager:
             self.consecutive_losses += 1
         else:
             self.consecutive_losses = 0
+        if not self.cfg.enable_risk_halts:
+            return
         day_pnl_pct = (self.equity - self.day_start_equity) / self.day_start_equity * 100
         if day_pnl_pct <= -self.cfg.daily_stop_pct:
             self.halted_reason = f"daily stop hit ({day_pnl_pct:.2f}%)"

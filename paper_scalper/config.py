@@ -13,18 +13,20 @@ class Settings(BaseSettings):
     symbol: str = "BTC/USD"
     candle_seconds: int = 60
 
-    # Paper account / costs
+    # Paper account / costs — LEARNING MODE: fees zeroed to study entry/exit logic
+    # in isolation. Re-enable (25bps Alpaca taker) before judging any go/no-go.
     starting_equity: float = 10_000.0
-    fee_bps: float = 25.0       # taker fee per side (Alpaca crypto tier 1)
-    slippage_bps: float = 3.0   # applied per side on top of bid/ask
+    fee_bps: float = 0.0        # learning mode (Alpaca crypto tier 1 taker: 25.0)
+    slippage_bps: float = 3.0   # kept: slippage is microstructure, not a fee
 
-    # Risk — AGGRESSIVE TEST TUNING (paper observation; tighten before judging go/no-go)
+    # Risk — LEARNING MODE: halts and cooldowns disabled, trade freely
+    enable_risk_halts: bool = False      # True restores daily stop + loss-streak halts
     risk_per_trade_pct: float = 0.5      # % of equity risked at SL per trade
     max_notional_fraction: float = 0.5   # cap position notional vs equity
-    daily_stop_pct: float = 5.0          # halt for the UTC day (production: 2.0)
-    max_consecutive_losses: int = 5      # production: 3
+    daily_stop_pct: float = 5.0          # only used when enable_risk_halts
+    max_consecutive_losses: int = 5      # only used when enable_risk_halts
     max_hold_seconds: int = 300
-    cooldown_candles: int = 1            # production: 3
+    cooldown_candles: int = 0            # learning mode (production: 3)
 
     # Strategy filters
     ema_fast: int = 9
@@ -51,6 +53,15 @@ class Settings(BaseSettings):
     mr_rsi_low: float = 32.0
     mr_rsi_high: float = 68.0
     mr_vwap_atr_mult: float = 0.8    # required stretch from VWAP in ATRs
+    mr_max_hold_seconds: int = 900   # fades need longer than momentum scalps
+
+    # Trend-scalp lane (strict 1:2 with scale-out + trailing stop)
+    trend_sl_atr_mult: float = 1.0
+    trend_sl_min_pct: float = 0.15
+    trend_sl_max_pct: float = 0.60
+    trend_rr: float = 2.0            # TP1 at +2R
+    trend_scale_out_frac: float = 0.5  # close half at TP1, SL jumps to +1R
+    trend_max_hold_seconds: int = 1800
 
     # Exits (ATR-adaptive, clamped to the spec's bounds)
     sl_atr_mult: float = 1.2
