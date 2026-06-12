@@ -38,7 +38,8 @@ class MomentumStrategy(TunableParams):
             "tp_min_pct": 0.35,
             "tp_max_pct": 1.00,
             "max_hold_seconds": cfg.max_hold_seconds,
-        }
+            "max_candle_atr_mult": 3.5,  # chase guard: a breakout candle may be big, but
+        }                                # not a vertical blow-off
 
     def on_candle(self, candle: Candle, quote: Quote | None) -> Signal | None:
         p = self.p
@@ -69,6 +70,9 @@ class MomentumStrategy(TunableParams):
             return None
         if vol_avg <= 0 or candle.volume < p["momo_vol_mult"] * vol_avg:
             snap.rejects.append("no volume confirmation")
+            return None
+        if candle.high - candle.low > p["max_candle_atr_mult"] * atr:
+            snap.rejects.append("chase guard: blow-off candle, waiting for digestion")
             return None
 
         side = "long" if px > prior_high else "short" if px < prior_low else None

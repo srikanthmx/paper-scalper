@@ -114,6 +114,15 @@ def signals(limit: int = 30, strategy: str = "all") -> list[dict]:
         j.close()
 
 
+@app.get("/api/hourly")
+def hourly(strategy: str = "all") -> list[dict]:
+    j = _journal()
+    try:
+        return j.hourly_summary(strategy)
+    finally:
+        j.close()
+
+
 @app.get("/api/daily")
 def daily(strategy: str = "all") -> list[dict]:
     j = _journal()

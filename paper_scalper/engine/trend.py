@@ -42,6 +42,7 @@ class TrendScalpStrategy(TunableParams):
             "scale_out_frac": cfg.trend_scale_out_frac,
             "max_hold_seconds": cfg.trend_max_hold_seconds,
             "require_trend_close": 1,        # 1: candle must close with trend; 0: any candle
+            "max_candle_atr_mult": 3.0,      # chase guard: skip entries after blow-off candles
         }
 
     def on_candle(self, candle: Candle, quote: Quote | None) -> Signal | None:
@@ -64,6 +65,9 @@ class TrendScalpStrategy(TunableParams):
             return None
         if not (p["min_atr_pct"] <= atr_pct <= p["max_atr_pct"]):
             snap.rejects.append(f"atr {atr_pct:.3f}% outside band")
+            return None
+        if candle.high - candle.low > p["max_candle_atr_mult"] * atr:
+            snap.rejects.append("chase guard: blow-off candle, waiting for digestion")
             return None
 
         sep_bps = (ema_f - ema_s) / px * 10_000

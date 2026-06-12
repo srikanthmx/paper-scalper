@@ -38,14 +38,30 @@ def test_momentum_needs_volume() -> None:
 
 def test_meanrev_fades_oversold_below_vwap() -> None:
     strategy = MeanReversionStrategy(cfg())
+    strategy.apply_params({"trend_veto_bps": 999.0})  # veto tested separately
     ts, px = 1_700_006_400.0, 100.0
-    for i in range(8):  # steady decline → low RSI, price below VWAP
+    for i in range(25):  # flat preamble warms all indicators incl. the veto EMAs
+        strategy.on_candle(candle(ts + i * 60, px, px + (0.02 if i % 2 == 0 else -0.02)), None)
+    signal = None
+    for i in range(25, 35):  # steady decline → low RSI, price below VWAP
         nxt = px - 0.4
-        strategy.on_candle(candle(ts + i * 60, px, nxt), None)
+        signal = signal or strategy.on_candle(candle(ts + i * 60, px, nxt), None)
         px = nxt
-    signal = strategy.on_candle(candle(ts + 480, px, px - 0.4), None)
     assert signal is not None and signal.side == "long"
     assert "fade" in signal.reason
+
+
+def test_meanrev_trend_veto_blocks_fading_strong_trends() -> None:
+    """The lane's biggest live loss source: shorting a strong rally. Now vetoed."""
+    strategy = MeanReversionStrategy(cfg())
+    ts, px = 1_700_006_400.0, 100.0
+    fired = False
+    for i in range(30):  # strong steady decline: oversold + stretched below VWAP,
+        nxt = px - 0.4   # but EMA9 far below EMA21 -> fading it is vetoed
+        fired = fired or strategy.on_candle(candle(ts + i * 60, px, nxt), None) is not None
+        px = nxt
+    assert fired is False
+    assert any("trend veto" in r for r in strategy.snapshot.rejects)
 
 
 def test_journal_separates_strategies(tmp_path) -> None:

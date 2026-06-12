@@ -241,6 +241,19 @@ class Journal:
             ).fetchall()
         return [dict(r) for r in rows]
 
+    def hourly_summary(self, strategy: str | None = None) -> list[dict[str, Any]]:
+        """Net PnL by UTC hour — time-of-day edge/bleed becomes visible."""
+        where, params = self._strat_clause(strategy)
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT CAST(strftime('%H', exit_ts, 'unixepoch') AS INTEGER) AS hour,"
+                " COUNT(*) AS trades,"
+                " SUM(CASE WHEN net_pnl > 0 THEN 1 ELSE 0 END) AS wins,"
+                " SUM(net_pnl) AS net_pnl"
+                f" FROM trades{where} GROUP BY hour ORDER BY hour", params,
+            ).fetchall()
+        return [dict(r) for r in rows]
+
     def summary(self, strategy: str | None = None) -> dict[str, Any]:
         trades = self.trades(limit=100_000, strategy=strategy)
         equity = self.equity_curve(limit=100_000, strategy=strategy or "all")

@@ -1,3 +1,7 @@
+"""Broker semantics: exit levels anchor to the entry quote MID and trigger on the
+current mid; fills execute at bid/ask plus slippage (costs land in PnL, not in
+the trigger geometry). Entry quotes here are symmetric so mid_ref is round."""
+
 from __future__ import annotations
 
 import pytest
@@ -29,27 +33,39 @@ def test_long_fills_at_ask_plus_slippage_with_fee() -> None:
     assert pos.entry_fee == pytest.approx(pos.entry_price * 0.0025)
 
 
-def test_take_profit_long() -> None:
+def test_levels_anchor_to_mid_not_fill() -> None:
     broker = PaperBroker(cfg())
-    broker.open_position(signal("long", 100, sl_pct=1, tp_pct=2), quote(0, 99.9, 100.0), qty=1.0)
-    assert broker.on_quote(quote(1, 101.0, 101.1)) is None  # below TP of 102
-    closed = broker.on_quote(quote(2, 102.0, 102.1))
+    pos = broker.open_position(signal("long", 100, sl_pct=1, tp_pct=2),
+                               quote(0, 99.95, 100.05), qty=1.0)
+    assert pos.mid_ref == pytest.approx(100.0)
+    assert pos.entry_price == pytest.approx(100.05)  # fill pays the spread
+    assert pos.sl_price == pytest.approx(99.0)       # but levels are mid-anchored
+    assert pos.tp_price == pytest.approx(102.0)
+
+
+def test_take_profit_long_triggers_on_mid_fills_at_bid() -> None:
+    broker = PaperBroker(cfg())
+    broker.open_position(signal("long", 100, sl_pct=1, tp_pct=2),
+                         quote(0, 99.95, 100.05), qty=1.0)
+    assert broker.on_quote(quote(1, 101.0, 101.1)) is None    # mid 101.05 < 102
+    closed = broker.on_quote(quote(2, 102.0, 102.1))          # mid 102.05 >= 102
     assert closed is not None and closed.reason_exit == "take_profit"
-    assert closed.gross_pnl == pytest.approx(2.0)
-    assert closed.net_pnl == pytest.approx(2.0 - (100 * 0.0025 + 102 * 0.0025))
+    assert closed.gross_pnl == pytest.approx(102.0 - 100.05)  # exit at bid
+    assert closed.fees == pytest.approx((100.05 + 102.0) * 0.0025)
 
 
-def test_stop_loss_short() -> None:
+def test_stop_loss_short_triggers_on_mid_fills_at_ask() -> None:
     broker = PaperBroker(cfg())
-    broker.open_position(signal("short", 100, sl_pct=1, tp_pct=2), quote(0, 100.0, 100.1), qty=1.0)
-    closed = broker.on_quote(quote(1, 100.9, 101.0))  # ask >= SL 101
+    broker.open_position(signal("short", 100, sl_pct=1, tp_pct=2),
+                         quote(0, 99.95, 100.05), qty=1.0)
+    closed = broker.on_quote(quote(1, 100.95, 101.05))        # mid 101 >= SL 101
     assert closed is not None and closed.reason_exit == "stop_loss"
-    assert closed.gross_pnl == pytest.approx(-1.0)
+    assert closed.gross_pnl == pytest.approx(99.95 - 101.05)  # entry bid, exit ask
 
 
 def test_max_hold_exit() -> None:
     broker = PaperBroker(cfg(max_hold_seconds=300))
-    broker.open_position(signal("long", 100), quote(0, 99.9, 100.0), qty=1.0)
+    broker.open_position(signal("long", 100), quote(0, 99.95, 100.05), qty=1.0)
     assert broker.on_quote(quote(299, 100.0, 100.1)) is None
     closed = broker.on_quote(quote(301, 100.0, 100.1))
     assert closed is not None and closed.reason_exit == "max_hold"
@@ -57,16 +73,18 @@ def test_max_hold_exit() -> None:
 
 def test_breakeven_stop_arms_and_protects() -> None:
     broker = PaperBroker(cfg(breakeven_after_r=0.5))
-    # entry 100, SL 99 (risk = 1.0); breakeven arms at +0.5
-    broker.open_position(signal("long", 100, sl_pct=1, tp_pct=5), quote(0, 99.9, 100.0), qty=1.0)
-    assert broker.on_quote(quote(1, 100.6, 100.7)) is None  # arms breakeven
-    closed = broker.on_quote(quote(2, 100.0, 100.1))        # bid back at entry → flat exit
+    # mid_ref 100, 1R = 1.0; breakeven arms at mid >= 100.5, SL moves to mid_ref
+    broker.open_position(signal("long", 100, sl_pct=1, tp_pct=5),
+                         quote(0, 99.95, 100.05), qty=1.0)
+    assert broker.on_quote(quote(1, 100.6, 100.7)) is None    # mid 100.65 arms it
+    closed = broker.on_quote(quote(2, 99.95, 100.05))         # mid 100 <= 100
     assert closed is not None and closed.reason_exit == "breakeven_stop"
-    assert closed.gross_pnl == pytest.approx(0.0, abs=1e-9)  # filled at bid == entry
+    # "breakeven" still pays the round-trip spread — that's the honest cost
+    assert closed.gross_pnl == pytest.approx(99.95 - 100.05)
 
 
 def test_cannot_double_open() -> None:
     broker = PaperBroker(cfg())
-    broker.open_position(signal("long", 100), quote(0, 99.9, 100.0), qty=1.0)
+    broker.open_position(signal("long", 100), quote(0, 99.95, 100.05), qty=1.0)
     with pytest.raises(RuntimeError):
-        broker.open_position(signal("long", 100), quote(1, 99.9, 100.0), qty=1.0)
+        broker.open_position(signal("long", 100), quote(1, 99.95, 100.05), qty=1.0)

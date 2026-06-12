@@ -365,6 +365,8 @@ footer { text-align: center; color: var(--faint); font-size: 11.5px; padding: 24
         <div class="bars" id="exit-bars"></div>
         <div class="card-h">Long vs short</div>
         <div class="bars" id="side-split"></div>
+        <div class="card-h">Net P&amp;L by UTC hour <span class="hint">where the bleed/edge lives</span></div>
+        <div class="bars" id="hour-bars"></div>
       </div>
       <div class="card span12">
         <div class="card-h">Auto-diagnostics <span class="hint">heuristics from STRATEGY.md, recomputed live</span></div>
@@ -531,12 +533,12 @@ function barList(el, entries, total, colorFn) {
 
 async function refresh() {
   const q = strat === "all" ? "" : "&strategy=" + strat;
-  let s, ov, trades, equity, candles, signals, daily;
+  let s, ov, trades, equity, candles, signals, daily, hourly;
   try {
-    [s, ov, trades, equity, candles, signals, daily] = await Promise.all([
+    [s, ov, trades, equity, candles, signals, daily, hourly] = await Promise.all([
       `summary?x=1${q}`, "overview", `trades?limit=500${q}`,
       `equity?limit=2000${q ? q : "&strategy=all"}`, "candles?limit=600",
-      "signals?limit=150", `daily?x=1${q}`,
+      "signals?limit=150", `daily?x=1${q}`, `hourly?x=1${q}`,
     ].map(p => fetch("/api/" + p).then(r => r.json())));
   } catch { $("livetxt").textContent = "api unreachable"; $("livedot").classList.add("stale"); return; }
 
@@ -669,6 +671,13 @@ async function refresh() {
   barList($("side-split"),
     Object.entries(s.by_side || {}).map(([k, v]) => [`${k} · ${signed(v.net_pnl)}`, v.trades]), s.trades,
     name => name.startsWith("long") ? "linear-gradient(90deg,#2ee6a8,#1fae80)" : "linear-gradient(90deg,#ff5c7a,#d44762)");
+  const maxAbs = Math.max(1, ...hourly.map(h => Math.abs(h.net_pnl)));
+  $("hour-bars").innerHTML = hourly.length ? hourly.map(h => `<div class="bar-row">
+    <span class="name">${String(h.hour).padStart(2, "0")}h · ${h.trades}t · ${h.wins}W</span>
+    <div class="bar-track"><div class="bar-fill" style="width:${Math.abs(h.net_pnl) / maxAbs * 100}%;
+      background:${h.net_pnl >= 0 ? "linear-gradient(90deg,#2ee6a8,#1fae80)" : "linear-gradient(90deg,#ff5c7a,#d44762)"}"></div></div>
+    <span class="n ${cls(h.net_pnl)}">${fmt(h.net_pnl, 0)}</span></div>`).join("")
+    : '<div class="empty">—</div>';
   $("diag").innerHTML = Object.entries(ov.diagnostics || {}).map(([n, notes]) =>
     `<div class="strat-block"><h3><span class="pill ${n}">${STRAT_NAME[n]}</span></h3>
      <ul>${notes.map(x => `<li>${x}</li>`).join("")}</ul></div>`).join("");
@@ -712,6 +721,8 @@ const META = {
   kc_mult:               { l: "Keltner band (ATRs)", g: "Entry", d: "channel width around EMA20", min: 1, max: 4, step: 0.1 },
   rsi_low:               { l: "Fade long RSI ≤", g: "Entry", d: "oversold confirmation", min: 5, max: 50, step: 1 },
   rsi_high:              { l: "Fade short RSI ≥", g: "Entry", d: "overbought confirmation", min: 50, max: 95, step: 1 },
+  trend_veto_bps:        { l: "Trend veto (bps)", g: "Filters", d: "skip fades when EMA9−21 separation exceeds this against you", min: 0, max: 15, step: 0.5 },
+  max_candle_atr_mult:   { l: "Chase guard (ATRs)", g: "Filters", d: "skip entry after a candle bigger than this many ATRs", min: 1, max: 8, step: 0.5 },
 };
 const PRESETS = {
   pullback: { Conservative: { vol_spike_mult: 1.5, rsi_long_min: 45, rsi_long_max: 65, rsi_short_min: 35, rsi_short_max: 55, ema_sep_min_bps: 2, min_atr_pct: 0.03 },

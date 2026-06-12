@@ -9,6 +9,12 @@ Two execution modes per position (set by the entry signal):
 - "simple":      full exit at SL / TP / breakeven / max-hold
 - "scale_trail": at TP (e.g. +2R) close scale_out_frac of the position, jump the
                  stop to +1R, then trail the remainder by 1R off the best price
+
+Marking convention (learned from live losses): exit LEVELS are anchored to the
+quote MID at entry and TRIGGERED by the current mid — otherwise the spread rigs
+the geometry (a long marked at bid starts most of the way to its stop while its
+target needs the bid to travel 2R+spread; observed live as a ~3% win rate).
+FILLS stay honest: bid/ask plus slippage, so costs still land in PnL.
 """
 
 from __future__ import annotations
@@ -33,9 +39,10 @@ class Position:
     mode: str = "simple"
     scale_out_frac: float = 0.5
     max_hold_seconds: int = 300
-    r_dist: float = 0.0          # initial risk distance (entry -> SL)
+    mid_ref: float = 0.0         # quote mid at entry — anchor for all exit levels
+    r_dist: float = 0.0          # initial risk distance in mid terms
     tp1_filled: bool = False
-    best_px: float = 0.0
+    best_px: float = 0.0         # best mid since TP1 (trailing anchor)
     breakeven_armed: bool = False
 
     def unrealized(self, quote: Quote) -> float:
@@ -84,15 +91,15 @@ class PaperBroker:
         raw = quote.ask if signal.side == "long" else quote.bid
         fill = self._slip(raw, signal.side, entering=True)
         sign = 1.0 if signal.side == "long" else -1.0
-        sl_price = fill * (1 - sign * signal.sl_pct / 100)
+        mid = quote.mid
         self.position = Position(
             side=signal.side, qty=qty, entry_ts=quote.ts, entry_price=fill,
-            sl_price=sl_price,
-            tp_price=fill * (1 + sign * signal.tp_pct / 100),
+            sl_price=mid * (1 - sign * signal.sl_pct / 100),
+            tp_price=mid * (1 + sign * signal.tp_pct / 100),
             entry_fee=self._fee(fill, qty), reason_entry=signal.reason,
             mode=signal.mode, scale_out_frac=signal.scale_out_frac,
             max_hold_seconds=signal.max_hold_seconds or self.cfg.max_hold_seconds,
-            r_dist=abs(fill - sl_price),
+            mid_ref=mid, r_dist=mid * signal.sl_pct / 100,
         )
         return self.position
 
@@ -100,17 +107,17 @@ class PaperBroker:
         pos = self.position
         if pos is None:
             return None
-        mark = quote.bid if pos.side == "long" else quote.ask
+        mark = quote.mid  # levels trigger on mid; fills execute at bid/ask
         sign = 1.0 if pos.side == "long" else -1.0
 
         if pos.mode == "scale_trail":
             return self._on_quote_scale_trail(quote, pos, mark, sign)
 
         # ── simple mode ──
-        # breakeven: once gain >= breakeven_after_r * initial risk, SL moves to entry
+        # breakeven: once gain >= breakeven_after_r * initial risk, SL moves to entry mid
         if not pos.breakeven_armed:
-            if sign * (mark - pos.entry_price) >= self.cfg.breakeven_after_r * pos.r_dist:
-                pos.sl_price = pos.entry_price
+            if sign * (mark - pos.mid_ref) >= self.cfg.breakeven_after_r * pos.r_dist:
+                pos.sl_price = pos.mid_ref
                 pos.breakeven_armed = True
         if sign * (mark - pos.tp_price) >= 0:
             return self._close(quote, "take_profit")
@@ -129,7 +136,7 @@ class PaperBroker:
                 trade = self._close_fraction(quote, pos.scale_out_frac, "partial_tp")
                 pos.tp1_filled = True
                 pos.best_px = mark
-                pos.sl_price = pos.entry_price + sign * pos.r_dist
+                pos.sl_price = pos.mid_ref + sign * pos.r_dist  # lock +1R (mid terms)
                 return trade
             if sign * (mark - pos.sl_price) <= 0:
                 return self._close(quote, "stop_loss")

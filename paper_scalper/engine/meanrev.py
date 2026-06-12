@@ -10,7 +10,7 @@ from __future__ import annotations
 from paper_scalper.config import Settings
 from paper_scalper.data.normalizer import Quote
 from paper_scalper.engine.candles import Candle
-from paper_scalper.engine.indicators import ATR, RSI, SessionVWAP
+from paper_scalper.engine.indicators import ATR, EMA, RSI, SessionVWAP
 from paper_scalper.engine.strategy import Signal, Snapshot
 from paper_scalper.engine.tunable import TunableParams
 
@@ -23,8 +23,11 @@ class MeanReversionStrategy(TunableParams):
         self.vwap = SessionVWAP()
         self.rsi = RSI(cfg.rsi_period)
         self.atr = ATR(cfg.atr_period)
+        self.ema_fast = EMA(cfg.ema_fast)
+        self.ema_slow = EMA(cfg.ema_slow)
         self.snapshot = Snapshot()
         self.p = {
+            "trend_veto_bps": 4.0,  # don't fade when EMA9-21 separation exceeds this
             "mr_rsi_low": cfg.mr_rsi_low,
             "mr_rsi_high": cfg.mr_rsi_high,
             "mr_vwap_atr_mult": cfg.mr_vwap_atr_mult,
@@ -45,12 +48,15 @@ class MeanReversionStrategy(TunableParams):
         vwap = self.vwap.update(candle)
         rsi = self.rsi.update(candle.close)
         atr = self.atr.update(candle)
+        ema_f = self.ema_fast.update(candle.close)
+        ema_s = self.ema_slow.update(candle.close)
 
         snap = Snapshot(close=candle.close, vwap=vwap, rsi=rsi, atr=atr)
         self.snapshot = snap
 
-        # NB: 0.0 is a legitimate value — only None means not warm
-        if None in (vwap, rsi, atr):
+        # NB: 0.0 is a legitimate value — only None means not warm.
+        # EMAs included: the trend veto must be armed before any fade is allowed.
+        if None in (vwap, rsi, atr, ema_f, ema_s):
             snap.rejects.append("warming_up")
             return None
 
@@ -72,6 +78,13 @@ class MeanReversionStrategy(TunableParams):
         if side is None:
             snap.rejects.append(f"no extreme (rsi {rsi:.1f}, vwap dist "
                                 f"{(px - vwap) / atr:+.2f} atr)")
+            return None
+
+        # trend veto — fading a strong trend was this lane's biggest live loss source
+        sep_bps = (ema_f - ema_s) / px * 10_000
+        if (side == "short" and sep_bps > p["trend_veto_bps"]) or \
+           (side == "long" and -sep_bps > p["trend_veto_bps"]):
+            snap.rejects.append(f"trend veto (ema sep {sep_bps:+.1f}bps against the fade)")
             return None
 
         sl_pct = min(max(p["sl_atr_mult"] * atr_pct, p["sl_min_pct"]), p["sl_max_pct"])

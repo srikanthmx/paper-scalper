@@ -22,7 +22,8 @@ class Settings(BaseSettings):
     # Risk — LEARNING MODE: halts and cooldowns disabled, trade freely
     enable_risk_halts: bool = False      # True restores daily stop + loss-streak halts
     risk_per_trade_pct: float = 0.5      # % of equity risked at SL per trade
-    max_notional_fraction: float = 0.5   # cap position notional vs equity
+    max_notional_fraction: float = 2.0   # paper leverage cap; at 0.5 it silently overrode
+                                         # risk_per_trade sizing on every BTC trade
     daily_stop_pct: float = 5.0          # only used when enable_risk_halts
     max_consecutive_losses: int = 5      # only used when enable_risk_halts
     max_hold_seconds: int = 300
