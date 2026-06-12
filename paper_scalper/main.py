@@ -94,6 +94,7 @@ class Engine:
         self.last_quote: Quote | None = None
         self._last_snapshot = 0.0
         self._last_equity_snap = 0.0
+        self._events_since_pub = 0
         for lane in self.lanes:
             self._sync_params(lane, bootstrap=True)
 
@@ -228,11 +229,16 @@ class Engine:
         }
 
     def _publish_state(self, ts: float) -> None:
+        self._events_since_pub += 1
         now = time.time()
         if now - self._last_snapshot < 2.0:
             return
+        elapsed = max(now - self._last_snapshot, 1e-9)
+        tick_rate = self._events_since_pub / elapsed * 60 if self._last_snapshot else 0.0
+        self._events_since_pub = 0
         self._last_snapshot = now
         quote = self.last_quote
+        forming = self.builders[self.cfg.candle_seconds].current
         lanes = {lane.name: self._lane_state(lane) for lane in self.lanes}
         pullback = next((l.strategy.snapshot for l in self.lanes if l.name == "pullback"),
                         Snapshot())
@@ -240,6 +246,15 @@ class Engine:
             "ts": ts,
             "symbol": self.cfg.symbol,
             "last_price": quote.mid if quote else None,
+            "bid": quote.bid if quote else None,
+            "ask": quote.ask if quote else None,
+            "spread_bps": quote.spread_bps if quote else None,
+            "tick_ts": quote.ts if quote else None,
+            "ticks_per_min": round(tick_rate, 1),
+            "forming": None if forming is None else {
+                "ts_open": forming.ts_open, "open": forming.open, "high": forming.high,
+                "low": forming.low, "close": forming.close, "volume": forming.volume,
+            },
             "equity": sum(s["equity"] for s in lanes.values()),
             "unrealized": sum(s["unrealized"] for s in lanes.values()),
             "lanes": lanes,

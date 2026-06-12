@@ -273,6 +273,7 @@ footer { text-align: center; color: var(--faint); font-size: 11.5px; padding: 24
   <span class="badge paper">Paper only</span>
   <span class="symbol" id="symbol">—</span>
   <div class="spacer"></div>
+  <span class="symbol" id="bidask">—</span>
   <span class="last-px" id="lastpx">—</span>
   <div class="live"><span class="dot" id="livedot"></span><span id="livetxt">connecting…</span></div>
 </header>
@@ -546,10 +547,15 @@ async function refresh() {
   const lanes = live.lanes || {};
   $("symbol").textContent = live.symbol || "";
   $("lastpx").textContent = live.last_price ? fmt(live.last_price) : "—";
+  $("bidask").textContent = live.bid
+    ? `${fmt(live.bid)} / ${fmt(live.ask)} · ${fmt(live.spread_bps, 1)}bps` : "—";
+  const tickAge = live.tick_ts ? Math.max(0, Date.now() / 1000 - live.tick_ts) : null;
   const fresh = live.ts && (Date.now() / 1000 - live.ts) < 60;
   $("livedot").classList.toggle("stale", !fresh && !live.stopped);
   $("livetxt").textContent = live.stopped ? "runner stopped"
-    : live.ts ? (fresh ? "live · " + hms(live.ts) : "stale · " + hms(live.ts)) : "no data yet";
+    : tickAge != null
+      ? `tick ${tickAge < 2 ? "now" : fmt(tickAge, 0) + "s ago"} · ~${fmt(live.ticks_per_min, 0)}/min`
+      : live.ts ? (fresh ? "live · " + hms(live.ts) : "stale · " + hms(live.ts)) : "no data yet";
   const halts = Object.entries(lanes).filter(([, l]) => l.halted)
     .map(([n, l]) => `${STRAT_NAME[n]}: ${l.halted}`);
   $("haltbar").style.display = halts.length ? "block" : "none";
@@ -578,6 +584,13 @@ async function refresh() {
   candleSeries.setData(candles.map(c => ({ time: Math.floor(c.ts_open), open: c.open, high: c.high, low: c.low, close: c.close })));
   volSeries.setData(candles.map(c => ({ time: Math.floor(c.ts_open), value: c.volume,
     color: c.close >= c.open ? "rgba(46,230,168,.22)" : "rgba(255,92,122,.22)" })));
+  const fc = live.forming;  // the live, still-forming candle — where ticks land
+  if (fc && (!candles.length || fc.ts_open >= candles[candles.length - 1].ts_open)) {
+    candleSeries.update({ time: Math.floor(fc.ts_open), open: fc.open, high: fc.high,
+                          low: fc.low, close: fc.close });
+    volSeries.update({ time: Math.floor(fc.ts_open), value: fc.volume,
+      color: fc.close >= fc.open ? "rgba(46,230,168,.22)" : "rgba(255,92,122,.22)" });
+  }
   const t0 = candles.length ? candles[0].ts_open : 0;
   const markers = [];
   for (const t of trades) {
@@ -929,7 +942,7 @@ setInterval(() => {
 }, 5000);
 
 refresh();
-setInterval(refresh, 3000);
+setInterval(refresh, 2000);
 </script>
 </body>
 </html>

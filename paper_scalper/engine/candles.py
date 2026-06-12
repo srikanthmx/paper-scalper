@@ -57,6 +57,11 @@ class CandleBuilder:
         # events older than the current bucket are dropped (out-of-order tick)
         return completed
 
+    @property
+    def current(self) -> Candle | None:
+        """The forming (not yet closed) candle, if any."""
+        return self._current
+
     def flush(self) -> Candle | None:
         cur, self._current = self._current, None
         return cur
