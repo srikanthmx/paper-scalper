@@ -21,6 +21,7 @@ from paper_scalper.config import Settings
 from paper_scalper.data.normalizer import Quote, Trade
 from paper_scalper.engine.candles import Candle, CandleBuilder
 from paper_scalper.engine.daily import DailyStrategy
+from paper_scalper.engine.keltner import KeltnerReversionStrategy
 from paper_scalper.engine.lorentz import LorentzianStrategy
 from paper_scalper.engine.meanrev import MeanReversionStrategy
 from paper_scalper.engine.momentum import MomentumStrategy
@@ -56,7 +57,8 @@ def stop_inside_spread(signal: Signal, quote: Quote, cfg: Settings) -> bool:
 
 def build_strategies(cfg: Settings) -> list[StrategyProtocol]:
     return [Strategy(cfg), MomentumStrategy(cfg), MeanReversionStrategy(cfg),
-            TrendScalpStrategy(cfg), DailyStrategy(cfg), LorentzianStrategy(cfg)]
+            TrendScalpStrategy(cfg), DailyStrategy(cfg), LorentzianStrategy(cfg),
+            KeltnerReversionStrategy(cfg)]
 
 
 class Lane:
