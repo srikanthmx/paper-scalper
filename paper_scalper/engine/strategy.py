@@ -1,11 +1,7 @@
-"""Scalping signal engine (v1.1 — improved over the original spec).
+"""Scalping signal engine — pullback-to-EMA9 trend scalper (v1.1).
 
-Improvements vs spec v1 (rationale in STRATEGY.md):
-- EMA separation floor (avoid bare-crossover chop entries)
-- spread filter (skip when bid/ask spread makes scalping uneconomic)
-- ATR band (skip dead chop and news spikes)
-- ATR-adaptive SL/TP, clamped to the spec's percentage bounds
-- explicit pullback-to-EMA9 entry with reclaim, both sides
+Shared Signal/Snapshot types for all strategies live here.
+Tunable params (self.p) are hot-reloadable from the dashboard; see tunable.py.
 """
 
 from __future__ import annotations
@@ -17,6 +13,7 @@ from paper_scalper.config import Settings
 from paper_scalper.data.normalizer import Quote
 from paper_scalper.engine.candles import Candle
 from paper_scalper.engine.indicators import ATR, EMA, RSI, RollingMean, SessionVWAP
+from paper_scalper.engine.tunable import TunableParams
 
 Side = Literal["long", "short"]
 
@@ -50,7 +47,7 @@ class Snapshot:
     rejects: list[str] = field(default_factory=list)
 
 
-class Strategy:
+class Strategy(TunableParams):
     """Pullback-to-EMA9 trend scalper (v1.1)."""
 
     name = "pullback"
@@ -65,9 +62,28 @@ class Strategy:
         self.vol_avg = RollingMean(cfg.vol_sma_period)
         self._prev_candle: Candle | None = None
         self.snapshot = Snapshot()
+        self.p = {
+            "vol_spike_mult": cfg.vol_spike_mult,
+            "rsi_long_min": cfg.rsi_long_min,
+            "rsi_long_max": cfg.rsi_long_max,
+            "rsi_short_min": cfg.rsi_short_min,
+            "rsi_short_max": cfg.rsi_short_max,
+            "ema_sep_min_bps": cfg.ema_sep_min_bps,
+            "pullback_tolerance_pct": cfg.pullback_tolerance_pct,
+            "min_atr_pct": cfg.min_atr_pct,
+            "max_atr_pct": cfg.max_atr_pct,
+            "max_spread_bps": cfg.max_spread_bps,
+            "sl_atr_mult": cfg.sl_atr_mult,
+            "tp_atr_mult": cfg.tp_atr_mult,
+            "sl_min_pct": cfg.sl_min_pct,
+            "sl_max_pct": cfg.sl_max_pct,
+            "tp_min_pct": cfg.tp_min_pct,
+            "tp_max_pct": cfg.tp_max_pct,
+            "max_hold_seconds": cfg.max_hold_seconds,
+        }
 
     def on_candle(self, candle: Candle, quote: Quote | None) -> Signal | None:
-        cfg = self.cfg
+        p = self.p
         vwap = self.vwap.update(candle)
         ema_f = self.ema_fast.update(candle.close)
         ema_s = self.ema_slow.update(candle.close)
@@ -91,24 +107,24 @@ class Strategy:
         px = candle.close
         atr_pct = atr / px * 100
 
-        if quote is not None and quote.spread_bps > cfg.max_spread_bps:
-            snap.rejects.append(f"spread {quote.spread_bps:.1f}bps > {cfg.max_spread_bps}")
+        if quote is not None and quote.spread_bps > p["max_spread_bps"]:
+            snap.rejects.append(f"spread {quote.spread_bps:.1f}bps > {p['max_spread_bps']}")
             return None
-        if not (cfg.min_atr_pct <= atr_pct <= cfg.max_atr_pct):
+        if not (p["min_atr_pct"] <= atr_pct <= p["max_atr_pct"]):
             snap.rejects.append(f"atr {atr_pct:.3f}% outside band")
             return None
-        if vol_avg <= 0 or candle.volume < cfg.vol_spike_mult * vol_avg:
+        if vol_avg <= 0 or candle.volume < p["vol_spike_mult"] * vol_avg:
             snap.rejects.append("no volume spike")
             return None
 
         sep_bps = (ema_f - ema_s) / px * 10_000
-        tol = px * cfg.pullback_tolerance_pct / 100
+        tol = px * p["pullback_tolerance_pct"] / 100
 
         side: Side | None = None
         if (
             px > vwap
-            and sep_bps >= cfg.ema_sep_min_bps
-            and cfg.rsi_long_min <= rsi <= cfg.rsi_long_max
+            and sep_bps >= p["ema_sep_min_bps"]
+            and p["rsi_long_min"] <= rsi <= p["rsi_long_max"]
             and min(prev.low, candle.low) <= ema_f + tol  # pulled back to EMA9...
             and px > ema_f                                # ...and reclaimed it
             and px > candle.open                          # closing in trend direction
@@ -116,8 +132,8 @@ class Strategy:
             side = "long"
         elif (
             px < vwap
-            and -sep_bps >= cfg.ema_sep_min_bps
-            and cfg.rsi_short_min <= rsi <= cfg.rsi_short_max
+            and -sep_bps >= p["ema_sep_min_bps"]
+            and p["rsi_short_min"] <= rsi <= p["rsi_short_max"]
             and max(prev.high, candle.high) >= ema_f - tol  # rallied into EMA9...
             and px < ema_f                                  # ...and got rejected
             and px < candle.open
@@ -128,11 +144,12 @@ class Strategy:
             snap.rejects.append("no setup")
             return None
 
-        sl_pct = min(max(cfg.sl_atr_mult * atr_pct, cfg.sl_min_pct), cfg.sl_max_pct)
-        tp_pct = min(max(cfg.tp_atr_mult * atr_pct, cfg.tp_min_pct), cfg.tp_max_pct)
+        sl_pct = min(max(p["sl_atr_mult"] * atr_pct, p["sl_min_pct"]), p["sl_max_pct"])
+        tp_pct = min(max(p["tp_atr_mult"] * atr_pct, p["tp_min_pct"]), p["tp_max_pct"])
         return Signal(
             side=side, ts=candle.ts_open + self.cfg.candle_seconds, ref_price=px,
             sl_pct=sl_pct, tp_pct=tp_pct,
+            max_hold_seconds=int(p["max_hold_seconds"]),
             reason=(f"{side}: px {px:.2f} vs vwap {vwap:.2f}, ema sep {sep_bps:.1f}bps, "
                     f"rsi {rsi:.1f}, vol {candle.volume:.3f} vs avg {vol_avg:.3f}, "
                     f"atr {atr_pct:.3f}%"),

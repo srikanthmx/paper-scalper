@@ -127,6 +127,28 @@ tbody tr:hover { background: rgba(110,168,255,.04); }
 .pill.momo { background: rgba(157,123,255,.14); color: var(--accent-2); }
 .pill.meanrev { background: rgba(255,200,87,.12); color: var(--amber); }
 .pill.trend { background: rgba(94,225,230,.12); color: #5ee1e6; }
+.pill.daily { background: rgba(255,121,198,.12); color: #ff79c6; }
+.pill.v { background: rgba(125,133,144,.10); color: var(--faint); padding: 2px 7px; }
+.tune-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; padding: 12px 16px 4px; }
+.tune-field label { display: block; font-size: 10.5px; color: var(--faint); font-weight: 600; margin-bottom: 4px; font-family: var(--mono); }
+.tune-field input {
+  width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text);
+  font-family: var(--mono); font-size: 13px; padding: 7px 9px; border-radius: 8px;
+}
+.tune-field input:focus { outline: none; border-color: var(--accent); }
+.tune-field input.dirty { border-color: var(--amber); }
+.tune-actions { display: flex; gap: 10px; padding: 12px 16px 16px; align-items: center; }
+.tune-actions input[type=text] {
+  flex: 1; background: var(--bg); border: 1px solid var(--border); color: var(--text);
+  font-size: 13px; padding: 8px 10px; border-radius: 8px;
+}
+.btn {
+  background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #07090d;
+  border: none; font: inherit; font-weight: 700; font-size: 13px; padding: 8px 18px;
+  border-radius: 9px; cursor: pointer;
+}
+.btn:disabled { opacity: .4; cursor: default; }
+.save-msg { font-size: 12px; color: var(--green); font-family: var(--mono); }
 .empty { padding: 36px; text-align: center; color: var(--faint); font-size: 13px; }
 
 .lanes { padding: 10px 12px 14px; display: grid; gap: 8px; }
@@ -184,6 +206,7 @@ footer { text-align: center; color: var(--faint); font-size: 11.5px; padding: 24
     <button class="active" data-tab="overview">Overview</button>
     <button data-tab="trades">Trades</button>
     <button data-tab="reports">Reports</button>
+    <button data-tab="tune">Tune</button>
   </nav>
   <div class="sep"></div>
   <div class="strats" id="strats">
@@ -192,6 +215,7 @@ footer { text-align: center; color: var(--faint); font-size: 11.5px; padding: 24
     <button data-strat="momo">Momentum</button>
     <button data-strat="meanrev">Mean-rev</button>
     <button data-strat="trend">Trend 1:2</button>
+    <button data-strat="daily">Daily</button>
   </div>
 </div>
 
@@ -222,6 +246,7 @@ footer { text-align: center; color: var(--faint); font-size: 11.5px; padding: 24
             <button data-fs="momo">M</button>
             <button data-fs="meanrev">R</button>
             <button data-fs="trend">T</button>
+            <button data-fs="daily">D</button>
             <button id="feed-entries" title="entries & risk blocks only">entries</button>
           </span>
           <span class="hint">why each lane did / didn’t trade</span>
@@ -266,6 +291,11 @@ footer { text-align: center; color: var(--faint); font-size: 11.5px; padding: 24
     </div>
   </section>
 
+  <!-- ════ TUNE ════ -->
+  <section class="tab" id="tab-tune">
+    <div class="grid" id="tune-cards"></div>
+  </section>
+
   <footer>paper-scalper · simulated fills only · no broker order APIs exist in this codebase</footer>
 </main>
 
@@ -279,8 +309,8 @@ const signed = x => (x >= 0 ? "+" : "") + usd.format(x);
 const cls = x => x > 0 ? "up" : x < 0 ? "down" : "flat";
 const hms = ts => new Date(ts * 1000).toLocaleTimeString("en-GB");
 const dur = s => `${Math.floor(s / 60)}m${String(Math.round(s % 60)).padStart(2, "0")}s`;
-const STRAT_LETTER = { pullback: "P", momo: "M", meanrev: "R", trend: "T" };
-const STRAT_NAME = { pullback: "Pullback", momo: "Momentum", meanrev: "Mean-rev", trend: "Trend 1:2" };
+const STRAT_LETTER = { pullback: "P", momo: "M", meanrev: "R", trend: "T", daily: "D" };
+const STRAT_NAME = { pullback: "Pullback", momo: "Momentum", meanrev: "Mean-rev", trend: "Trend 1:2", daily: "Daily" };
 let strat = "all";
 
 document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
@@ -366,7 +396,7 @@ function kpiCard(label, value, klass = "", sub = "") {
 function tradeRows(trades, full) {
   return trades.map(t => `<tr>
     <td>${hms(t.exit_ts)}</td>
-    <td style="text-align:left"><span class="pill ${t.strategy}">${STRAT_NAME[t.strategy] || t.strategy}</span></td>
+    <td style="text-align:left"><span class="pill ${t.strategy}">${STRAT_NAME[t.strategy] || t.strategy}</span> <span class="pill v">v${t.version ?? 0}</span></td>
     <td style="text-align:left"><span class="pill ${t.side}">${t.side}</span></td>
     ${full ? `<td>${fmt(t.qty, 6)}</td>` : ""}
     <td>${fmt(t.entry_price)}</td><td>${fmt(t.exit_price)}</td>
@@ -531,6 +561,68 @@ async function refresh() {
     `<div class="strat-block"><h3><span class="pill ${n}">${STRAT_NAME[n]}</span></h3>
      <ul>${notes.map(x => `<li>${x}</li>`).join("")}</ul></div>`).join("");
 }
+
+/* ── Tune tab: live param editing with internal versioning ── */
+async function loadTune() {
+  const [cfgs, vstats] = await Promise.all([
+    fetch("/api/params").then(r => r.json()),
+    fetch("/api/versions").then(r => r.json()),
+  ]);
+  $("tune-cards").innerHTML = Object.entries(cfgs).map(([name, c]) => {
+    const fields = Object.entries(c.params).map(([k, v]) => `
+      <div class="tune-field"><label>${k}</label>
+        <input type="number" step="any" data-strat="${name}" data-key="${k}"
+               value="${v}" data-orig="${v}"></div>`).join("");
+    const stats = vstats.filter(s => s.strategy === name);
+    const hist = (c.history || []).map(h => {
+      const st = stats.find(s => s.version === h.version) || {};
+      const active = h.version === c.version;
+      return `<tr${active ? ' style="background:rgba(110,168,255,.06)"' : ""}>
+        <td>v${h.version}${active ? " ●" : ""}</td>
+        <td style="text-align:left">${h.note || "—"}</td>
+        <td>${st.trades || 0}</td>
+        <td>${st.trades ? fmt(st.wins / st.trades * 100, 0) + "%" : "—"}</td>
+        <td class="${cls(st.net_pnl || 0)}">${st.net_pnl == null ? "—" : fmt(st.net_pnl)}</td>
+        <td class="${cls(st.expectancy || 0)}">${st.expectancy == null ? "—" : fmt(st.expectancy)}</td>
+      </tr>`;
+    }).join("");
+    return `<div class="card span6">
+      <div class="card-h"><span class="pill ${name}">${STRAT_NAME[name]}</span>
+        active v${c.version}
+        <span class="hint">applies on the next candle · trades are tagged per version</span></div>
+      <div class="tune-grid">${fields}</div>
+      <div class="tune-actions">
+        <input type="text" id="note-${name}" placeholder="what are you testing? (saved with the version)">
+        <button class="btn" data-save="${name}">Save as v${c.version + 1}</button>
+        <span class="save-msg" id="msg-${name}"></span>
+      </div>
+      <div class="card-h">Version history</div>
+      <table><thead><tr><th>Ver</th><th>Note</th><th>Trades</th><th>Win %</th>
+        <th>Net $</th><th>Avg $/trade</th></tr></thead>
+        <tbody>${hist || '<tr><td colspan="6" class="empty">—</td></tr>'}</tbody></table>
+    </div>`;
+  }).join("");
+
+  document.querySelectorAll("#tune-cards input[type=number]").forEach(inp =>
+    inp.oninput = () => inp.classList.toggle("dirty", inp.value !== inp.dataset.orig));
+  document.querySelectorAll("#tune-cards button[data-save]").forEach(btn =>
+    btn.onclick = async () => {
+      const name = btn.dataset.save;
+      const params = {};
+      document.querySelectorAll(`#tune-cards input[data-strat="${name}"]`).forEach(inp => {
+        if (inp.value !== inp.dataset.orig) params[inp.dataset.key] = Number(inp.value);
+      });
+      if (!Object.keys(params).length) { $("msg-" + name).textContent = "no changes"; return; }
+      btn.disabled = true;
+      const res = await fetch("/api/params", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ strategy: name, params, note: $("note-" + name).value }),
+      }).then(r => r.json());
+      $("msg-" + name).textContent = res.version ? `saved v${res.version} ✓` : "error";
+      setTimeout(loadTune, 800);
+    });
+}
+document.querySelector('nav button[data-tab="tune"]').addEventListener("click", loadTune);
 
 refresh();
 setInterval(refresh, 3000);

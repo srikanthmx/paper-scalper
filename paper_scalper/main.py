@@ -20,6 +20,7 @@ from typing import Protocol
 from paper_scalper.config import Settings
 from paper_scalper.data.normalizer import Quote, Trade
 from paper_scalper.engine.candles import Candle, CandleBuilder
+from paper_scalper.engine.daily import DailyStrategy
 from paper_scalper.engine.meanrev import MeanReversionStrategy
 from paper_scalper.engine.momentum import MomentumStrategy
 from paper_scalper.engine.paper_broker import ClosedTrade, PaperBroker
@@ -36,13 +37,16 @@ EQUITY_SNAPSHOT_SECONDS = 30
 class StrategyProtocol(Protocol):
     name: str
     snapshot: Snapshot
+    p: dict
 
     def on_candle(self, candle: Candle, quote: Quote | None) -> Signal | None: ...
+
+    def apply_params(self, new: dict) -> None: ...
 
 
 def build_strategies(cfg: Settings) -> list[StrategyProtocol]:
     return [Strategy(cfg), MomentumStrategy(cfg), MeanReversionStrategy(cfg),
-            TrendScalpStrategy(cfg)]
+            TrendScalpStrategy(cfg), DailyStrategy(cfg)]
 
 
 class Lane:
@@ -53,6 +57,8 @@ class Lane:
         self.strategy = strategy
         self.risk = RiskManager(cfg)
         self.broker = PaperBroker(cfg)
+        self.version = 0       # active param version (journal param_versions)
+        self.open_version = 0  # version the current position was entered under
 
 
 class Engine:
@@ -65,6 +71,22 @@ class Engine:
         self.last_quote: Quote | None = None
         self._last_snapshot = 0.0
         self._last_equity_snap = 0.0
+        for lane in self.lanes:
+            self._sync_params(lane, bootstrap=True)
+
+    def _sync_params(self, lane: Lane, bootstrap: bool = False) -> None:
+        """Apply dashboard-saved params; tag the lane with the active version."""
+        state = self.journal.get_state(f"params:{lane.name}")
+        if state is None:
+            if bootstrap:
+                lane.version = self.journal.save_param_version(
+                    lane.name, dict(lane.strategy.p), note="initial defaults")
+            return
+        if state["version"] != lane.version:
+            lane.strategy.apply_params(state["params"])
+            lane.version = state["version"]
+            log.info("[%s] params v%d applied: %s", lane.name, lane.version,
+                     state["params"])
 
     def on_event(self, event: Trade | Quote) -> None:
         if isinstance(event, Quote):
@@ -84,6 +106,7 @@ class Engine:
         self.journal.record_candle(self.cfg.symbol, candle.ts_open, candle.open,
                                    candle.high, candle.low, candle.close, candle.volume)
         for lane in self.lanes:
+            self._sync_params(lane)
             lane.risk.on_candle()
             signal = lane.strategy.on_candle(candle, self.last_quote)
             snap = lane.strategy.snapshot
@@ -102,6 +125,7 @@ class Engine:
             if qty <= 0:
                 continue
             pos = lane.broker.open_position(signal, self.last_quote, qty)
+            lane.open_version = lane.version
             self.journal.record_signal(signal.ts, self.cfg.symbol, lane.name, "signal",
                                        signal.reason)
             log.info("[%s] OPEN %s qty=%.6f @ %.2f sl=%.2f tp=%.2f | %s", lane.name,
@@ -110,7 +134,8 @@ class Engine:
 
     def _handle_close(self, lane: Lane, trade: ClosedTrade) -> None:
         lane.risk.on_trade_closed(trade.net_pnl, trade.exit_ts)
-        self.journal.record_trade(self.cfg.symbol, lane.name, trade)
+        self.journal.record_trade(self.cfg.symbol, lane.name, trade,
+                                  version=lane.open_version)
         self.journal.record_equity(trade.exit_ts, lane.risk.equity, lane.name)
         log.info("[%s] CLOSE %s @ %.2f (%s) net=%.2f fees=%.2f equity=%.2f", lane.name,
                  trade.side, trade.exit_price, trade.reason_exit, trade.net_pnl,
@@ -124,6 +149,7 @@ class Engine:
         unrealized = pos.unrealized(quote) if pos and quote else 0.0
         return {
             "equity": lane.risk.equity,
+            "version": lane.version,
             "unrealized": unrealized,
             "halted": lane.risk.halted_reason,
             "consecutive_losses": lane.risk.consecutive_losses,

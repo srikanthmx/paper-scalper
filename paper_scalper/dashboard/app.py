@@ -10,6 +10,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
 
 from paper_scalper.config import Settings
 from paper_scalper.storage.db import Journal
@@ -23,7 +24,7 @@ def _journal() -> Journal:
     return Journal(_cfg.db_path)
 
 
-STRATEGIES = ["pullback", "momo", "meanrev", "trend"]
+STRATEGIES = ["pullback", "momo", "meanrev", "trend", "daily"]
 
 
 @app.get("/api/summary")
@@ -116,6 +117,56 @@ def daily(strategy: str = "all") -> list[dict]:
     j = _journal()
     try:
         return j.daily_summary(strategy)
+    finally:
+        j.close()
+
+
+class ParamSave(BaseModel):
+    strategy: str
+    params: dict[str, float]
+    note: str = ""
+
+
+@app.get("/api/params")
+def get_params() -> dict:
+    """Active tunables per strategy (what the runner is currently using)."""
+    j = _journal()
+    try:
+        out = {}
+        for name in STRATEGIES:
+            state = j.get_state(f"params:{name}") or {}
+            out[name] = {
+                "version": state.get("version", 0),
+                "params": state.get("params", {}),
+                "history": j.param_versions(name)[:10],
+            }
+        return out
+    finally:
+        j.close()
+
+
+@app.post("/api/params")
+def save_params(body: ParamSave) -> dict:
+    """Save a new param version. Empty/partial params merge onto the active set.
+    The runner applies it on the next candle and tags trades with the version."""
+    if body.strategy not in STRATEGIES:
+        return {"error": f"unknown strategy {body.strategy}"}
+    j = _journal()
+    try:
+        state = j.get_state(f"params:{body.strategy}") or {}
+        merged = {**state.get("params", {}), **body.params}
+        version = j.save_param_version(body.strategy, merged, note=body.note)
+        return {"strategy": body.strategy, "version": version, "params": merged}
+    finally:
+        j.close()
+
+
+@app.get("/api/versions")
+def versions() -> list[dict]:
+    """Per (strategy, version) performance — compare what each tweak did."""
+    j = _journal()
+    try:
+        return j.version_stats()
     finally:
         j.close()
 

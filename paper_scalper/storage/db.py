@@ -43,6 +43,14 @@ CREATE TABLE IF NOT EXISTS signal_log (
     kind TEXT NOT NULL,      -- 'signal' | 'reject' | 'risk_block'
     detail TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS param_versions (
+    strategy TEXT NOT NULL,
+    version INTEGER NOT NULL,
+    params TEXT NOT NULL,        -- JSON of tunables at this version
+    note TEXT NOT NULL DEFAULT '',
+    created_ts REAL NOT NULL,
+    PRIMARY KEY (strategy, version)
+);
 CREATE TABLE IF NOT EXISTS candles (
     ts_open REAL NOT NULL,
     symbol TEXT NOT NULL,
@@ -58,6 +66,7 @@ CREATE TABLE IF NOT EXISTS candles (
 # Columns added after the initial release; applied to pre-existing databases.
 MIGRATIONS = [
     ("trades", "strategy", "TEXT NOT NULL DEFAULT 'pullback'"),
+    ("trades", "version", "INTEGER NOT NULL DEFAULT 0"),
     ("equity_snapshots", "strategy", "TEXT NOT NULL DEFAULT 'all'"),
     ("signal_log", "strategy", "TEXT NOT NULL DEFAULT 'pullback'"),
 ]
@@ -76,17 +85,68 @@ class Journal:
                     self._conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
             self._conn.commit()
 
-    def record_trade(self, symbol: str, strategy: str, trade: ClosedTrade) -> None:
+    def record_trade(self, symbol: str, strategy: str, trade: ClosedTrade,
+                     version: int = 0) -> None:
         with self._lock:
             self._conn.execute(
-                "INSERT INTO trades (symbol, strategy, side, qty, entry_ts, entry_price,"
-                " exit_ts, exit_price, fees, gross_pnl, net_pnl, net_pnl_pct,"
-                " reason_entry, reason_exit) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                (symbol, strategy, trade.side, trade.qty, trade.entry_ts, trade.entry_price,
-                 trade.exit_ts, trade.exit_price, trade.fees, trade.gross_pnl,
-                 trade.net_pnl, trade.net_pnl_pct, trade.reason_entry, trade.reason_exit),
+                "INSERT INTO trades (symbol, strategy, version, side, qty, entry_ts,"
+                " entry_price, exit_ts, exit_price, fees, gross_pnl, net_pnl, net_pnl_pct,"
+                " reason_entry, reason_exit) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (symbol, strategy, version, trade.side, trade.qty, trade.entry_ts,
+                 trade.entry_price, trade.exit_ts, trade.exit_price, trade.fees,
+                 trade.gross_pnl, trade.net_pnl, trade.net_pnl_pct, trade.reason_entry,
+                 trade.reason_exit),
             )
             self._conn.commit()
+
+    def save_param_version(self, strategy: str, params: dict[str, Any],
+                           note: str = "") -> int:
+        """Insert a new param version and activate it. Returns the version number."""
+        import time as _time
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT COALESCE(MAX(version), 0) AS v FROM param_versions WHERE strategy=?",
+                (strategy,),
+            ).fetchone()
+            version = row["v"] + 1
+            self._conn.execute(
+                "INSERT INTO param_versions (strategy, version, params, note, created_ts)"
+                " VALUES (?,?,?,?,?)",
+                (strategy, version, json.dumps(params), note, _time.time()),
+            )
+            self._conn.execute(
+                "INSERT INTO state (key, value) VALUES (?,?)"
+                " ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (f"params:{strategy}", json.dumps({"version": version, "params": params})),
+            )
+            self._conn.commit()
+        return version
+
+    def param_versions(self, strategy: str) -> list[dict[str, Any]]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT version, params, note, created_ts FROM param_versions"
+                " WHERE strategy=? ORDER BY version DESC", (strategy,),
+            ).fetchall()
+        out = []
+        for r in rows:
+            d = dict(r)
+            d["params"] = json.loads(d["params"])
+            out.append(d)
+        return out
+
+    def version_stats(self) -> list[dict[str, Any]]:
+        """Per (strategy, version) performance — the learning ledger."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT strategy, version, COUNT(*) AS trades,"
+                " SUM(CASE WHEN net_pnl > 0 THEN 1 ELSE 0 END) AS wins,"
+                " SUM(net_pnl) AS net_pnl, SUM(fees) AS fees,"
+                " AVG(net_pnl) AS expectancy"
+                " FROM trades GROUP BY strategy, version"
+                " ORDER BY strategy, version DESC",
+            ).fetchall()
+        return [dict(r) for r in rows]
 
     def record_equity(self, ts: float, equity: float, strategy: str = "all") -> None:
         with self._lock:
