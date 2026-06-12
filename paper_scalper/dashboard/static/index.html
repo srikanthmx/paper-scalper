@@ -128,6 +128,7 @@ tbody tr:hover { background: rgba(110,168,255,.04); }
 .pill.meanrev { background: rgba(255,200,87,.12); color: var(--amber); }
 .pill.trend { background: rgba(94,225,230,.12); color: #5ee1e6; }
 .pill.daily { background: rgba(255,121,198,.12); color: #ff79c6; }
+.pill.lorentz { background: rgba(255,184,108,.12); color: #ffb86c; }
 .pill.v { background: rgba(125,133,144,.10); color: var(--faint); padding: 2px 7px; }
 .tune-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; padding: 12px 16px 4px; }
 .tune-field label { display: block; font-size: 10.5px; color: var(--faint); font-weight: 600; margin-bottom: 4px; font-family: var(--mono); }
@@ -292,6 +293,7 @@ footer { text-align: center; color: var(--faint); font-size: 11.5px; padding: 24
     <button data-strat="meanrev">Mean-rev</button>
     <button data-strat="trend">Trend 1:2</button>
     <button data-strat="daily">Daily</button>
+    <button data-strat="lorentz">Lorentzian</button>
   </div>
 </div>
 
@@ -323,6 +325,7 @@ footer { text-align: center; color: var(--faint); font-size: 11.5px; padding: 24
             <button data-fs="meanrev">R</button>
             <button data-fs="trend">T</button>
             <button data-fs="daily">D</button>
+            <button data-fs="lorentz">L</button>
             <button id="feed-entries" title="entries & risk blocks only">entries</button>
           </span>
           <span class="hint">why each lane did / didn’t trade</span>
@@ -415,8 +418,8 @@ const signed = x => (x >= 0 ? "+" : "") + usd.format(x);
 const cls = x => x > 0 ? "up" : x < 0 ? "down" : "flat";
 const hms = ts => new Date(ts * 1000).toLocaleTimeString("en-GB");
 const dur = s => `${Math.floor(s / 60)}m${String(Math.round(s % 60)).padStart(2, "0")}s`;
-const STRAT_LETTER = { pullback: "P", momo: "M", meanrev: "R", trend: "T", daily: "D" };
-const STRAT_NAME = { pullback: "Pullback", momo: "Momentum", meanrev: "Mean-rev", trend: "Trend 1:2", daily: "Daily" };
+const STRAT_LETTER = { pullback: "P", momo: "M", meanrev: "R", trend: "T", daily: "D", lorentz: "L" };
+const STRAT_NAME = { pullback: "Pullback", momo: "Momentum", meanrev: "Mean-rev", trend: "Trend 1:2", daily: "Daily", lorentz: "Lorentzian" };
 let strat = "all";
 
 document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
@@ -695,6 +698,14 @@ const META = {
   rr:                    { l: "Risk : Reward", g: "Exit", d: "TP1 placed at R × this", min: 1, max: 5, step: 0.25 },
   scale_out_frac:        { l: "Scale-out fraction", g: "Exit", d: "portion closed at TP1", min: 0.1, max: 0.9, step: 0.05 },
   max_hold_seconds:      { l: "Max hold (sec)", g: "Exit", d: "time-based exit", min: 60, max: 7200, step: 30 },
+  pred_threshold:        { l: "Prediction strength ≥", g: "Entry", d: "kNN vote sum required (max 8)", min: 1, max: 8, step: 1 },
+  min_samples:           { l: "Min training samples", g: "Entry", d: "labeled candles before predicting", min: 20, max: 1000, step: 10 },
+  touch_tol_pct:         { l: "VWAP touch tolerance (%)", g: "Entry", d: "how close to VWAP counts as a touch", min: 0, max: 0.3, step: 0.01 },
+  sl_pct:                { l: "Stop (%)", g: "Exit", d: "fixed stop distance", min: 0.05, max: 1, step: 0.01 },
+  tp_pct:                { l: "Target (%)", g: "Exit", d: "fixed target distance", min: 0.1, max: 2, step: 0.05 },
+  session_only:          { l: "Session filter", g: "Filters", d: "trade only during the UTC session window", toggle: true },
+  session_start_hour:    { l: "Session start (UTC h)", g: "Filters", d: "window open hour", min: 0, max: 23, step: 1 },
+  session_end_hour:      { l: "Session end (UTC h)", g: "Filters", d: "window close hour", min: 1, max: 24, step: 1 },
 };
 const PRESETS = {
   pullback: { Conservative: { vol_spike_mult: 1.5, rsi_long_min: 45, rsi_long_max: 65, rsi_short_min: 35, rsi_short_max: 55, ema_sep_min_bps: 2, min_atr_pct: 0.03 },

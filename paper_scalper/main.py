@@ -21,6 +21,7 @@ from paper_scalper.config import Settings
 from paper_scalper.data.normalizer import Quote, Trade
 from paper_scalper.engine.candles import Candle, CandleBuilder
 from paper_scalper.engine.daily import DailyStrategy
+from paper_scalper.engine.lorentz import LorentzianStrategy
 from paper_scalper.engine.meanrev import MeanReversionStrategy
 from paper_scalper.engine.momentum import MomentumStrategy
 from paper_scalper.engine.paper_broker import ClosedTrade, PaperBroker
@@ -44,9 +45,18 @@ class StrategyProtocol(Protocol):
     def apply_params(self, new: dict) -> None: ...
 
 
+def stop_inside_spread(signal: Signal, quote: Quote, cfg: Settings) -> bool:
+    """True when the stop distance can't survive entry costs: crossing the spread
+    plus slippage puts the mark below the SL immediately (instant stop-out).
+    Found live: a $120 spread during a spike insta-killed every trend entry."""
+    sl_bps = signal.sl_pct * 100
+    entry_cost_bps = quote.spread_bps + 2 * cfg.slippage_bps
+    return sl_bps <= entry_cost_bps * 1.2
+
+
 def build_strategies(cfg: Settings) -> list[StrategyProtocol]:
     return [Strategy(cfg), MomentumStrategy(cfg), MeanReversionStrategy(cfg),
-            TrendScalpStrategy(cfg), DailyStrategy(cfg)]
+            TrendScalpStrategy(cfg), DailyStrategy(cfg), LorentzianStrategy(cfg)]
 
 
 class Lane:
@@ -120,6 +130,12 @@ class Engine:
                 log.info("[%s] signal blocked by risk: %s", lane.name, decision.reason)
                 self.journal.record_signal(signal.ts, self.cfg.symbol, lane.name, "risk_block",
                                            f"{signal.reason} | blocked: {decision.reason}")
+                continue
+            if stop_inside_spread(signal, self.last_quote, self.cfg):
+                self.journal.record_signal(
+                    signal.ts, self.cfg.symbol, lane.name, "risk_block",
+                    f"{signal.reason} | blocked: stop {signal.sl_pct * 100:.1f}bps inside "
+                    f"spread {self.last_quote.spread_bps:.1f}bps — instant stop-out")
                 continue
             qty = lane.risk.position_size(signal.ref_price, signal.sl_pct)
             if qty <= 0:

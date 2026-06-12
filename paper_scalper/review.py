@@ -15,7 +15,7 @@ def _ts(ts: float) -> str:
     return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
 
-STRATEGIES = ["pullback", "momo", "meanrev", "trend", "daily"]
+STRATEGIES = ["pullback", "momo", "meanrev", "trend", "daily", "lorentz"]
 
 
 def main() -> None:

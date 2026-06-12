@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 
+import pytest
+
 from paper_scalper.config import Settings
 from paper_scalper.data.replay_feed import SyntheticFeed
 from paper_scalper.engine.daily import DailyStrategy
@@ -68,15 +70,26 @@ def test_version_stats_groups_trades(tmp_path) -> None:
     journal.close()
 
 
-def test_daily_supertrend_flips_long_on_breakout() -> None:
+def test_daily_vwap_pullback_long_on_touch_and_reclaim() -> None:
     strategy = DailyStrategy(Settings())
+    strategy.apply_params({"session_only": 0})  # rules under test, not the clock
     ts, px = 1_700_000_000.0, 100.0
-    for i in range(15):  # establish a down-trend
-        strategy.on_candle(candle(ts + i * 60, px, px - 0.3), None)
-        px -= 0.3
-    signal = None
-    for i in range(15, 40):  # strong reversal up should flip the band
-        signal = signal or strategy.on_candle(candle(ts + i * 60, px, px + 0.6), None)
-        px += 0.6
+    for i in range(20):  # gentle uptrend keeps price above VWAP
+        strategy.on_candle(candle(ts + i * 60, px, px + 0.05), None)
+        px += 0.05
+    vwap = strategy.vwap.value
+    assert vwap is not None and px > vwap
+    pullback = candle(ts + 20 * 60, px, px + 0.04, low=vwap - 0.01)  # touch + reclaim
+    signal = strategy.on_candle(pullback, None)
     assert signal is not None and signal.side == "long"
-    assert "Supertrend" in signal.reason
+    assert "VWAP Pullback" in signal.reason
+    assert signal.tp_pct == pytest.approx(2 * signal.sl_pct)
+
+
+def test_daily_session_filter_blocks_outside_window() -> None:
+    strategy = DailyStrategy(Settings())
+    ts, px = 1_700_000_000.0, 100.0  # 2023-11-14 22:13 UTC — outside 13:00-16:00
+    for i in range(20):  # past indicator warm-up so the session gate is reached
+        strategy.on_candle(candle(ts + i * 60, px, px + 0.05), None)
+        px += 0.05
+    assert any("session" in r for r in strategy.snapshot.rejects)

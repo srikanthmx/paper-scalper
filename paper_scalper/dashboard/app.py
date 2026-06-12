@@ -26,7 +26,7 @@ def _journal() -> Journal:
     return Journal(_cfg.db_path)
 
 
-STRATEGIES = ["pullback", "momo", "meanrev", "trend", "daily"]
+STRATEGIES = ["pullback", "momo", "meanrev", "trend", "daily", "lorentz"]
 
 
 @app.get("/api/summary")

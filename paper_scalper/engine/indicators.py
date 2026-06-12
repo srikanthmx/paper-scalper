@@ -126,6 +126,47 @@ class SessionVWAP:
         return self.value
 
 
+class CCI:
+    """Commodity Channel Index over typical price (windowed, O(period) per update)."""
+
+    def __init__(self, period: int = 20) -> None:
+        self.period = period
+        self._window: deque[float] = deque(maxlen=period)
+        self.value: float | None = None
+
+    def update(self, candle: Candle) -> float | None:
+        tp = candle.typical
+        self._window.append(tp)
+        if len(self._window) < self.period:
+            return None
+        mean = sum(self._window) / self.period
+        mad = sum(abs(x - mean) for x in self._window) / self.period
+        self.value = 0.0 if mad == 0 else (tp - mean) / (0.015 * mad)
+        return self.value
+
+
+class WaveTrend:
+    """LazyBear's WaveTrend oscillator (WT1), incremental EMA chain."""
+
+    def __init__(self, channel: int = 10, average: int = 21) -> None:
+        self._esa = EMA(channel)
+        self._dev = EMA(channel)
+        self._tci = EMA(average)
+        self.value: float | None = None
+
+    def update(self, candle: Candle) -> float | None:
+        tp = candle.typical
+        esa = self._esa.update(tp)
+        if esa is None:
+            return None
+        dev = self._dev.update(abs(tp - esa))
+        if dev is None or dev == 0:
+            return None
+        ci = (tp - esa) / (0.015 * dev)
+        self.value = self._tci.update(ci)
+        return self.value
+
+
 class RollingMean:
     def __init__(self, period: int) -> None:
         self.period = period
