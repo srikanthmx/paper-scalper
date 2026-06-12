@@ -13,10 +13,10 @@ Source: tradethatswing.com strict-rule ORB (published 74.6% win rate, PF 2.51 â€
 on equities at the open; this BTC adaptation is our own).
 
 Rules: BTC has no official open, but it reliably reacts to the US equity open.
-Mark the high/low of the first 15 minutes after 13:30 UTC. After the window,
-enter on a candle closing beyond the range (small buffer, volume confirmation):
-SL at the opposite range edge (clamped), TP at 2R. One trade per direction per
-day; no entries after the session cutoff.
+Mark the high/low of the first 15 minutes after 13:30 UTC. The moment the range
+completes, ARM STOP ORDERS at both edges (plus buffer) â€” the engine fills them
+on the tick that crosses, OCO (first fill cancels the other side), valid until
+the session cutoff. SL at the opposite range edge (clamped), TP at 2R.
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ from datetime import datetime, timezone
 from paper_scalper.config import Settings
 from paper_scalper.data.normalizer import Quote
 from paper_scalper.engine.candles import Candle
-from paper_scalper.engine.indicators import ATR, RollingMean
+from paper_scalper.engine.indicators import ATR
 from paper_scalper.engine.strategy import Signal, Snapshot
 from paper_scalper.engine.tunable import TunableParams
 
@@ -39,19 +39,17 @@ class DailyStrategy(TunableParams):
     def __init__(self, cfg: Settings) -> None:
         self.cfg = cfg
         self.atr = ATR(cfg.atr_period)
-        self.vol_avg = RollingMean(cfg.vol_sma_period)
         self.snapshot = Snapshot()
         self._day: int | None = None
         self._or_high: float | None = None
         self._or_low: float | None = None
-        self._done: set[str] = set()  # sides already traded this session
+        self._armed = False
         self.p = {
             "or_start_hour": 13,       # US equity open, UTC
             "or_start_min": 30,
             "or_window_min": 15,       # opening-range length
-            "cutoff_hour": 20,         # no new entries after this UTC hour
-            "vol_mult": 1.1,           # breakout candle volume vs average
-            "buffer_bps": 2.0,         # close must clear the range by this
+            "cutoff_hour": 20,         # pending stops expire at this UTC hour
+            "buffer_bps": 2.0,         # stop sits this far beyond the range edge
             "rr": 2.0,                 # strict 1:2
             "sl_min_pct": 0.10,        # SL = opposite range edge, clamped
             "sl_max_pct": 0.80,
@@ -64,15 +62,34 @@ class DailyStrategy(TunableParams):
         if day != self._day:
             self._day = day
             self._or_high = self._or_low = None
-            self._done = set()
+            self._armed = False
 
-    def on_candle(self, candle: Candle, quote: Quote | None) -> Signal | None:
+    def _stop_signal(self, side: str, ts: float, valid: int) -> Signal:
+        p = self.p
+        buffer_mult = p["buffer_bps"] / 10_000
+        if side == "long":
+            entry = self._or_high * (1 + buffer_mult)
+            edge = self._or_low
+        else:
+            entry = self._or_low * (1 - buffer_mult)
+            edge = self._or_high
+        sl_pct = min(max(abs(entry - edge) / entry * 100, p["sl_min_pct"]), p["sl_max_pct"])
+        return Signal(
+            side=side, ts=ts, ref_price=entry, sl_pct=sl_pct, tp_pct=p["rr"] * sl_pct,
+            entry_type="stop", entry_stop=entry, valid_seconds=valid,
+            max_hold_seconds=int(p["max_hold_seconds"]),
+            reason=(f"{side} {ALGO}: stop armed at {entry:.2f} "
+                    f"({'above' if side == 'long' else 'below'} range "
+                    f"{self._or_low:.2f}-{self._or_high:.2f}), SL opposite edge "
+                    f"({sl_pct:.3f}%), TP {p['rr']:.0f}R, OCO until "
+                    f"{int(p['cutoff_hour'])}:00 UTC"),
+        )
+
+    def on_candle(self, candle: Candle, quote: Quote | None) -> list[Signal] | None:
         p = self.p
         self._roll_day(candle.ts_open)
-        vol_avg = self.vol_avg.value  # lagged baseline
-        self.vol_avg.update(candle.volume)
         atr = self.atr.update(candle)
-        snap = Snapshot(close=candle.close, atr=atr, vol_avg=vol_avg)
+        snap = Snapshot(close=candle.close, atr=atr)
         self.snapshot = snap
 
         dt = datetime.fromtimestamp(candle.ts_open, tz=timezone.utc)
@@ -89,40 +106,19 @@ class DailyStrategy(TunableParams):
             self._or_low = candle.low if self._or_low is None else min(self._or_low, candle.low)
             snap.rejects.append(f"building opening range ({self._or_low:.2f}-{self._or_high:.2f})")
             return None
-        if self._or_high is None or self._or_low is None:
-            snap.rejects.append("no opening range today (started mid-session)")
+        if self._armed or self._or_high is None or self._or_low is None:
+            if not self._armed:
+                snap.rejects.append("no opening range today (started mid-session)")
             return None
         if minute >= int(p["cutoff_hour"]) * 60:
             snap.rejects.append("session over (past cutoff)")
             return None
 
-        px = candle.close
-        if quote is not None and quote.spread_bps > p["max_spread_bps"]:
-            snap.rejects.append(f"spread {quote.spread_bps:.1f}bps > {p['max_spread_bps']}")
-            return None
-        if vol_avg is None or vol_avg <= 0 or candle.volume < p["vol_mult"] * vol_avg:
-            snap.rejects.append("no volume confirmation")
-            return None
-
-        buffer = px * p["buffer_bps"] / 10_000
-        side = None
-        if px > self._or_high + buffer and "long" not in self._done:
-            side, edge = "long", self._or_low
-        elif px < self._or_low - buffer and "short" not in self._done:
-            side, edge = "short", self._or_high
-        if side is None:
-            snap.rejects.append(f"inside range {self._or_low:.2f}-{self._or_high:.2f}"
-                                f" (or side done)")
-            return None
-
-        self._done.add(side)
-        sl_pct = min(max(abs(px - edge) / px * 100, p["sl_min_pct"]), p["sl_max_pct"])
-        return Signal(
-            side=side, ts=candle.ts_open + self.cfg.candle_seconds, ref_price=px,
-            sl_pct=sl_pct, tp_pct=p["rr"] * sl_pct,
-            max_hold_seconds=int(p["max_hold_seconds"]),
-            reason=(f"{side} {ALGO}: close {px:.2f} broke "
-                    f"{'above' if side == 'long' else 'below'} opening range "
-                    f"{self._or_low:.2f}-{self._or_high:.2f}, SL at opposite edge "
-                    f"({sl_pct:.3f}%), TP {p['rr']:.0f}R"),
-        )
+        # range complete: arm OCO stop orders at both edges, valid until cutoff
+        self._armed = True
+        candle_end = candle.ts_open + self.cfg.candle_seconds
+        cutoff_ts = datetime(dt.year, dt.month, dt.day, int(p["cutoff_hour"]),
+                             tzinfo=timezone.utc).timestamp()
+        valid = max(int(cutoff_ts - candle_end), 60)
+        return [self._stop_signal("long", candle_end, valid),
+                self._stop_signal("short", candle_end, valid)]

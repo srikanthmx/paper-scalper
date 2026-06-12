@@ -31,6 +31,12 @@ class Signal:
     mode: str = "simple"
     scale_out_frac: float = 0.5
     max_hold_seconds: int | None = None  # per-signal override of cfg.max_hold_seconds
+    # entry execution: "market" fills on the next quote after the signal;
+    # "stop" arms a pending order the engine fills on the TICK that crosses
+    # entry_stop (true tick-level entries; opposite-side pendings are OCO)
+    entry_type: str = "market"
+    entry_stop: float | None = None
+    valid_seconds: int = 60              # pending order lifetime
 
 
 @dataclass(slots=True)
@@ -51,6 +57,7 @@ class Strategy(TunableParams):
     """Pullback-to-EMA9 trend scalper (v1.1)."""
 
     name = "pullback"
+    timeframe_seconds = 60  # each strategy declares the candle TF it was designed for
 
     def __init__(self, cfg: Settings) -> None:
         self.cfg = cfg

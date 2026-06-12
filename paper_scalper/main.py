@@ -41,7 +41,8 @@ class StrategyProtocol(Protocol):
     snapshot: Snapshot
     p: dict
 
-    def on_candle(self, candle: Candle, quote: Quote | None) -> Signal | None: ...
+    def on_candle(self, candle: Candle,
+                  quote: Quote | None) -> Signal | list[Signal] | None: ...
 
     def apply_params(self, new: dict) -> None: ...
 
@@ -67,10 +68,12 @@ class Lane:
     def __init__(self, strategy: StrategyProtocol, cfg: Settings) -> None:
         self.name = strategy.name
         self.strategy = strategy
+        self.timeframe = getattr(strategy, "timeframe_seconds", cfg.candle_seconds)
         self.risk = RiskManager(cfg)
         self.broker = PaperBroker(cfg)
         self.version = 0       # active param version (journal param_versions)
         self.open_version = 0  # version the current position was entered under
+        self.pending: list[tuple[Signal, float]] = []  # armed stop orders (signal, expiry)
 
 
 class Engine:
@@ -78,8 +81,16 @@ class Engine:
                  strategies: list[StrategyProtocol] | None = None) -> None:
         self.cfg = cfg
         self.journal = journal
-        self.candles = CandleBuilder(cfg.candle_seconds)
         self.lanes = [Lane(s, cfg) for s in (strategies or build_strategies(cfg))]
+        # one candle builder per timeframe; lanes subscribe to their own TF.
+        # cfg.candle_seconds is always built — it feeds the chart journal.
+        self.lanes_by_tf: dict[int, list[Lane]] = {}
+        for lane in self.lanes:
+            self.lanes_by_tf.setdefault(lane.timeframe, []).append(lane)
+        self.builders: dict[int, CandleBuilder] = {
+            tf: CandleBuilder(tf)
+            for tf in {cfg.candle_seconds, *self.lanes_by_tf.keys()}
+        }
         self.last_quote: Quote | None = None
         self._last_snapshot = 0.0
         self._last_equity_snap = 0.0
@@ -107,48 +118,84 @@ class Engine:
                 closed = lane.broker.on_quote(event)
                 if closed is not None:
                     self._handle_close(lane, closed)
-            completed = self.candles.on_quote(event)
-        else:
-            completed = self.candles.on_trade(event)
-        if completed is not None:
-            self._on_candle_closed(completed)
+                self._check_pending(lane, event)
+        for tf, builder in self.builders.items():
+            completed = (builder.on_quote(event) if isinstance(event, Quote)
+                         else builder.on_trade(event))
+            if completed is None:
+                continue
+            if tf == self.cfg.candle_seconds:
+                self.journal.record_candle(self.cfg.symbol, completed.ts_open,
+                                           completed.open, completed.high, completed.low,
+                                           completed.close, completed.volume)
+            self._on_candle_closed(completed, self.lanes_by_tf.get(tf, []))
         self._publish_state(event.ts)
 
-    def _on_candle_closed(self, candle: Candle) -> None:
-        self.journal.record_candle(self.cfg.symbol, candle.ts_open, candle.open,
-                                   candle.high, candle.low, candle.close, candle.volume)
-        for lane in self.lanes:
+    def _check_pending(self, lane: Lane, quote: Quote) -> None:
+        """Fill armed stop orders on the tick that crosses them (OCO per lane)."""
+        if not lane.pending:
+            return
+        if lane.broker.position is not None:
+            return
+        still_armed: list[tuple[Signal, float]] = []
+        for sig, expiry in lane.pending:
+            if quote.ts >= expiry:
+                self.journal.record_signal(quote.ts, self.cfg.symbol, lane.name, "reject",
+                                           f"stop entry expired unfilled @ {sig.entry_stop:.2f}")
+                continue
+            sign = 1.0 if sig.side == "long" else -1.0
+            if sig.entry_stop is not None and sign * (quote.mid - sig.entry_stop) >= 0:
+                if self._try_open(lane, sig, quote):
+                    lane.pending = []  # OCO: a fill cancels every sibling order
+                    return
+            still_armed.append((sig, expiry))
+        lane.pending = still_armed
+
+    def _on_candle_closed(self, candle: Candle, lanes: list[Lane]) -> None:
+        for lane in lanes:
             self._sync_params(lane)
             lane.risk.on_candle()
-            signal = lane.strategy.on_candle(candle, self.last_quote)
+            result = lane.strategy.on_candle(candle, self.last_quote)
             snap = lane.strategy.snapshot
             if snap.rejects and snap.rejects != ["warming_up"]:
                 self.journal.record_signal(candle.ts_open, self.cfg.symbol, lane.name,
                                            "reject", "; ".join(snap.rejects))
-            if signal is None or lane.broker.position is not None or self.last_quote is None:
-                continue
-            decision = lane.risk.can_enter(signal.ts)
-            if not decision.allowed:
-                log.info("[%s] signal blocked by risk: %s", lane.name, decision.reason)
-                self.journal.record_signal(signal.ts, self.cfg.symbol, lane.name, "risk_block",
-                                           f"{signal.reason} | blocked: {decision.reason}")
-                continue
-            if stop_inside_spread(signal, self.last_quote, self.cfg):
-                self.journal.record_signal(
-                    signal.ts, self.cfg.symbol, lane.name, "risk_block",
-                    f"{signal.reason} | blocked: stop {signal.sl_pct * 100:.1f}bps inside "
-                    f"spread {self.last_quote.spread_bps:.1f}bps — instant stop-out")
-                continue
-            qty = lane.risk.position_size(signal.ref_price, signal.sl_pct)
-            if qty <= 0:
-                continue
-            pos = lane.broker.open_position(signal, self.last_quote, qty)
-            lane.open_version = lane.version
-            self.journal.record_signal(signal.ts, self.cfg.symbol, lane.name, "signal",
-                                       signal.reason)
-            log.info("[%s] OPEN %s qty=%.6f @ %.2f sl=%.2f tp=%.2f | %s", lane.name,
-                     pos.side, pos.qty, pos.entry_price, pos.sl_price, pos.tp_price,
-                     signal.reason)
+            signals = result if isinstance(result, list) else [result] if result else []
+            for signal in signals:
+                if signal.entry_type == "stop":
+                    lane.pending.append((signal, signal.ts + signal.valid_seconds))
+                    self.journal.record_signal(signal.ts, self.cfg.symbol, lane.name,
+                                               "signal", f"ARMED: {signal.reason}")
+                    log.info("[%s] ARMED stop %s @ %.2f", lane.name, signal.side,
+                             signal.entry_stop or 0.0)
+                elif lane.broker.position is None and self.last_quote is not None:
+                    self._try_open(lane, signal, self.last_quote)
+
+    def _try_open(self, lane: Lane, signal: Signal, quote: Quote) -> bool:
+        decision = lane.risk.can_enter(quote.ts)
+        if not decision.allowed:
+            log.info("[%s] signal blocked by risk: %s", lane.name, decision.reason)
+            self.journal.record_signal(quote.ts, self.cfg.symbol, lane.name, "risk_block",
+                                       f"{signal.reason} | blocked: {decision.reason}")
+            return False
+        if stop_inside_spread(signal, quote, self.cfg):
+            self.journal.record_signal(
+                quote.ts, self.cfg.symbol, lane.name, "risk_block",
+                f"{signal.reason} | blocked: stop {signal.sl_pct * 100:.1f}bps inside "
+                f"spread {quote.spread_bps:.1f}bps — instant stop-out")
+            return False
+        qty = lane.risk.position_size(signal.ref_price, signal.sl_pct)
+        if qty <= 0:
+            return False
+        pos = lane.broker.open_position(signal, quote, qty)
+        lane.open_version = lane.version
+        lane.pending = []
+        self.journal.record_signal(quote.ts, self.cfg.symbol, lane.name, "signal",
+                                   signal.reason)
+        log.info("[%s] OPEN %s qty=%.6f @ %.2f sl=%.2f tp=%.2f | %s", lane.name,
+                 pos.side, pos.qty, pos.entry_price, pos.sl_price, pos.tp_price,
+                 signal.reason)
+        return True
 
     def _handle_close(self, lane: Lane, trade: ClosedTrade) -> None:
         lane.risk.on_trade_closed(trade.net_pnl, trade.exit_ts)
@@ -168,6 +215,9 @@ class Engine:
         return {
             "equity": lane.risk.equity,
             "version": lane.version,
+            "tf": lane.timeframe,
+            "pending": [{"side": s.side, "entry_stop": s.entry_stop, "expiry": exp}
+                        for s, exp in lane.pending],
             "unrealized": unrealized,
             "halted": lane.risk.halted_reason,
             "consecutive_losses": lane.risk.consecutive_losses,

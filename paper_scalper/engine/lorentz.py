@@ -43,6 +43,7 @@ def lorentzian_distance(a: Features, b: Features) -> float:
 
 class LorentzianStrategy(TunableParams):
     name = "lorentz"
+    timeframe_seconds = 180  # 3m candles: kNN features are noise-dominated on 1m
 
     def __init__(self, cfg: Settings) -> None:
         self.cfg = cfg
@@ -64,7 +65,7 @@ class LorentzianStrategy(TunableParams):
             "sl_min_pct": 0.10,
             "sl_max_pct": 0.60,
             "rr": 2.0,
-            "max_hold_seconds": 600,
+            "max_hold_seconds": 720,  # = LOOKAHEAD bars on the 3m timeframe
         }
 
     def _features(self) -> Features | None:

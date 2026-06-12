@@ -617,12 +617,15 @@ async function refresh() {
   $("lanes").innerHTML = laneNames.length ? laneNames.map(n => {
     const l = lanes[n];
     const p = l.position;
+    const armed = (l.pending || []).length;
     return `<div class="lane ${l.halted ? "halted" : ""}">
       <span class="pill ${n}">${STRAT_NAME[n]}</span>
+      <span class="pill gray">${(l.tf || 60) / 60}m</span>
       <span class="eq">${money(l.equity)}</span>
       ${l.halted ? '<span class="pill gray">halted</span>' : ""}
       <span class="ps">${p
         ? `<span class="${p.side === "long" ? "up" : "down"}">${p.side.toUpperCase()}</span> @ ${fmt(p.entry_price)} <span class="${cls(l.unrealized)}">${signed(l.unrealized)}</span>`
+        : armed ? `<span class="flat">⏳ ${armed} stop order${armed > 1 ? "s" : ""} armed</span>`
         : '<span class="flat">flat</span>'}</span>
     </div>`;
   }).join("") : '<div class="empty" style="padding:14px">runner offline</div>';

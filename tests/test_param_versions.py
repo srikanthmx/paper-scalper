@@ -75,30 +75,30 @@ def _utc(hour: int, minute: int) -> float:
     return datetime(2026, 6, 12, hour, minute, tzinfo=timezone.utc).timestamp()
 
 
-def test_daily_orb_breaks_out_long_with_volume() -> None:
+def test_daily_orb_arms_oco_stops_when_range_completes() -> None:
     strategy = DailyStrategy(Settings())
     px = 100.0
-    ts = _utc(13, 0)
-    for i in range(30):  # pre-open candles warm the volume baseline
-        strategy.on_candle(candle(ts + i * 60, px, px + (0.02 if i % 2 == 0 else -0.02)), None)
     ts = _utc(13, 30)
     for i in range(15):  # opening range 99.7–100.3
         strategy.on_candle(candle(ts + i * 60, px, px, low=99.7, high=100.3), None)
     assert any("building opening range" in r for r in strategy.snapshot.rejects)
-    breakout = candle(_utc(13, 50), px, 100.6, vol=2.0)  # clears 100.3 with volume
-    signal = strategy.on_candle(breakout, None)
-    assert signal is not None and signal.side == "long"
-    assert "Opening Range Breakout" in signal.reason
-    assert signal.tp_pct == pytest.approx(2 * signal.sl_pct)  # strict 1:2
-    # one long per session: a second breakout candle must not fire again
-    assert strategy.on_candle(candle(_utc(13, 55), 100.6, 100.9, vol=2.0), None) is None
+    signals = strategy.on_candle(candle(_utc(13, 45), px, px + 0.01), None)
+    assert isinstance(signals, list) and len(signals) == 2
+    by_side = {s.side: s for s in signals}
+    assert by_side["long"].entry_type == "stop"
+    assert by_side["long"].entry_stop == pytest.approx(100.3 * 1.0002)   # edge + buffer
+    assert by_side["short"].entry_stop == pytest.approx(99.7 * 0.9998)
+    for s in signals:
+        assert s.tp_pct == pytest.approx(2 * s.sl_pct)  # strict 1:2
+        assert s.valid_seconds > 3600                   # alive until the 20:00 cutoff
+    # arms exactly once per session
+    assert strategy.on_candle(candle(_utc(13, 46), px, px + 0.01), None) is None
 
 
-def test_daily_orb_quiet_before_open_and_after_cutoff() -> None:
+def test_daily_orb_quiet_before_open_and_without_range() -> None:
     strategy = DailyStrategy(Settings())
     px = 100.0
     strategy.on_candle(candle(_utc(9, 0), px, px + 0.1), None)
     assert any("waiting for opening range" in r for r in strategy.snapshot.rejects)
     strategy.on_candle(candle(_utc(21, 0), px, px + 0.1), None)
-    assert any("no opening range" in r or "session over" in r
-               for r in strategy.snapshot.rejects)
+    assert any("no opening range" in r for r in strategy.snapshot.rejects)
