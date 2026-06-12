@@ -70,26 +70,35 @@ def test_version_stats_groups_trades(tmp_path) -> None:
     journal.close()
 
 
-def test_daily_vwap_pullback_long_on_touch_and_reclaim() -> None:
+def _utc(hour: int, minute: int) -> float:
+    from datetime import datetime, timezone
+    return datetime(2026, 6, 12, hour, minute, tzinfo=timezone.utc).timestamp()
+
+
+def test_daily_orb_breaks_out_long_with_volume() -> None:
     strategy = DailyStrategy(Settings())
-    strategy.apply_params({"session_only": 0})  # rules under test, not the clock
-    ts, px = 1_700_000_000.0, 100.0
-    for i in range(20):  # gentle uptrend keeps price above VWAP
-        strategy.on_candle(candle(ts + i * 60, px, px + 0.05), None)
-        px += 0.05
-    vwap = strategy.vwap.value
-    assert vwap is not None and px > vwap
-    pullback = candle(ts + 20 * 60, px, px + 0.04, low=vwap - 0.01)  # touch + reclaim
-    signal = strategy.on_candle(pullback, None)
+    px = 100.0
+    ts = _utc(13, 0)
+    for i in range(30):  # pre-open candles warm the volume baseline
+        strategy.on_candle(candle(ts + i * 60, px, px + (0.02 if i % 2 == 0 else -0.02)), None)
+    ts = _utc(13, 30)
+    for i in range(15):  # opening range 99.7–100.3
+        strategy.on_candle(candle(ts + i * 60, px, px, low=99.7, high=100.3), None)
+    assert any("building opening range" in r for r in strategy.snapshot.rejects)
+    breakout = candle(_utc(13, 50), px, 100.6, vol=2.0)  # clears 100.3 with volume
+    signal = strategy.on_candle(breakout, None)
     assert signal is not None and signal.side == "long"
-    assert "VWAP Pullback" in signal.reason
-    assert signal.tp_pct == pytest.approx(2 * signal.sl_pct)
+    assert "Opening Range Breakout" in signal.reason
+    assert signal.tp_pct == pytest.approx(2 * signal.sl_pct)  # strict 1:2
+    # one long per session: a second breakout candle must not fire again
+    assert strategy.on_candle(candle(_utc(13, 55), 100.6, 100.9, vol=2.0), None) is None
 
 
-def test_daily_session_filter_blocks_outside_window() -> None:
+def test_daily_orb_quiet_before_open_and_after_cutoff() -> None:
     strategy = DailyStrategy(Settings())
-    ts, px = 1_700_000_000.0, 100.0  # 2023-11-14 22:13 UTC — outside 13:00-16:00
-    for i in range(20):  # past indicator warm-up so the session gate is reached
-        strategy.on_candle(candle(ts + i * 60, px, px + 0.05), None)
-        px += 0.05
-    assert any("session" in r for r in strategy.snapshot.rejects)
+    px = 100.0
+    strategy.on_candle(candle(_utc(9, 0), px, px + 0.1), None)
+    assert any("waiting for opening range" in r for r in strategy.snapshot.rejects)
+    strategy.on_candle(candle(_utc(21, 0), px, px + 0.1), None)
+    assert any("no opening range" in r or "session over" in r
+               for r in strategy.snapshot.rejects)

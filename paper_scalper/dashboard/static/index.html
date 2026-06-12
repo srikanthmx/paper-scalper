@@ -722,6 +722,12 @@ const META = {
   rsi_low:               { l: "Fade long RSI ≤", g: "Entry", d: "oversold confirmation", min: 5, max: 50, step: 1 },
   rsi_high:              { l: "Fade short RSI ≥", g: "Entry", d: "overbought confirmation", min: 50, max: 95, step: 1 },
   trend_veto_bps:        { l: "Trend veto (bps)", g: "Filters", d: "skip fades when EMA9−21 separation exceeds this against you", min: 0, max: 15, step: 0.5 },
+  or_start_hour:         { l: "Range start (UTC h)", g: "Entry", d: "opening-range window start", min: 0, max: 23, step: 1 },
+  or_start_min:          { l: "Range start (min)", g: "Entry", d: "minutes past the hour", min: 0, max: 59, step: 5 },
+  or_window_min:         { l: "Range length (min)", g: "Entry", d: "opening-range duration", min: 5, max: 60, step: 5 },
+  cutoff_hour:           { l: "Entry cutoff (UTC h)", g: "Filters", d: "no new entries after this", min: 14, max: 24, step: 1 },
+  vol_mult:              { l: "Volume confirm ×", g: "Entry", d: "breakout candle volume vs average", min: 1, max: 3, step: 0.05 },
+  buffer_bps:            { l: "Breakout buffer (bps)", g: "Entry", d: "close must clear the range by this", min: 0, max: 20, step: 1 },
   max_candle_atr_mult:   { l: "Chase guard (ATRs)", g: "Filters", d: "skip entry after a candle bigger than this many ATRs", min: 1, max: 8, step: 0.5 },
 };
 const PRESETS = {
