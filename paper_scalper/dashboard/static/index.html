@@ -548,15 +548,17 @@ async function refresh() {
   const lanes = live.lanes || {};
   $("symbol").textContent = live.symbol || "";
   $("lastpx").textContent = live.last_price ? fmt(live.last_price) : "—";
-  $("bidask").textContent = live.bid
-    ? `${fmt(live.bid)} / ${fmt(live.ask)} · ${fmt(live.spread_bps, 1)}bps` : "—";
   const tickAge = live.tick_ts ? Math.max(0, Date.now() / 1000 - live.tick_ts) : null;
+  const stale = tickAge != null && tickAge > 30;
+  $("bidask").textContent = (live.spread_bps != null)
+    ? `spread ${fmt(live.spread_bps, 1)}bps` : "—";
   const fresh = live.ts && (Date.now() / 1000 - live.ts) < 60;
-  $("livedot").classList.toggle("stale", !fresh && !live.stopped);
+  $("livedot").classList.toggle("stale", (stale || !fresh) && !live.stopped);
   $("livetxt").textContent = live.stopped ? "runner stopped"
+    : stale ? `⚠ feed stale ${fmt(tickAge, 0)}s`
     : tickAge != null
-      ? `tick ${tickAge < 2 ? "now" : fmt(tickAge, 0) + "s ago"} · ~${fmt(live.ticks_per_min, 0)}/min`
-      : live.ts ? (fresh ? "live · " + hms(live.ts) : "stale · " + hms(live.ts)) : "no data yet";
+      ? `live · ~${fmt(live.ticks_per_min, 0)} ticks/min`
+      : live.ts ? (fresh ? "live" : "stale") : "no data yet";
   const halts = Object.entries(lanes).filter(([, l]) => l.halted)
     .map(([n, l]) => `${STRAT_NAME[n]}: ${l.halted}`);
   $("haltbar").style.display = halts.length ? "block" : "none";
@@ -568,8 +570,9 @@ async function refresh() {
   const scopeUnreal = strat === "all" ? live.unrealized
     : lanes[strat] ? lanes[strat].unrealized : null;
   const ind = live.indicators || {};
+  const laneCount = Object.keys(lanes).length;
   $("kpis").innerHTML =
-    kpiCard("Equity" + (strat === "all" ? " (3 lanes)" : ""), money(scopeEquity), "",
+    kpiCard("Equity" + (strat === "all" ? ` (${laneCount} lanes)` : ""), money(scopeEquity), "",
             scopeUnreal ? `unrealized ${signed(scopeUnreal)}` : "") +
     kpiCard("Net P&amp;L", signed(s.net_pnl), cls(s.net_pnl), `gross ${signed(s.gross_pnl)}`) +
     kpiCard("Fees paid", money(s.total_fees), "",

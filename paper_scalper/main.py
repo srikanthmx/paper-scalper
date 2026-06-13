@@ -35,6 +35,7 @@ from paper_scalper.storage.db import Journal
 log = logging.getLogger("paper_scalper")
 
 EQUITY_SNAPSHOT_SECONDS = 30
+STALE_GAP_SECONDS = 30  # a feed gap longer than this means prices are unreliable
 
 
 class StrategyProtocol(Protocol):
@@ -103,6 +104,8 @@ class Engine:
         self._last_snapshot = 0.0
         self._last_equity_snap = 0.0
         self._events_since_pub = 0
+        self._last_price_ts: float | None = None
+        self._gap_skip = False  # block new entries on the tick right after a feed gap
         for lane in self.lanes:
             self._sync_params(lane, bootstrap=True)
 
@@ -121,6 +124,15 @@ class Engine:
                      state["params"])
 
     def on_event(self, event: Trade | Quote) -> None:
+        # Detect a feed gap (e.g. websocket reconnect): price may have jumped while
+        # we were blind. Block NEW entries on this tick so we never open at a stale
+        # price into a gap. Open positions still get their exits — holding through an
+        # outage is real risk — but we won't add fresh exposure on bad data.
+        if self._last_price_ts is not None and event.ts - self._last_price_ts > STALE_GAP_SECONDS:
+            self._gap_skip = True
+            log.warning("feed gap %.0fs — blocking new entries this tick",
+                        event.ts - self._last_price_ts)
+        self._last_price_ts = event.ts
         # Exits and pending fills must be checked on EVERY price update, not just
         # quotes. Coinbase sends far more trade ticks than quotes; checking only on
         # quotes lets stops/targets trigger late (a stop fires well past its level,
@@ -152,6 +164,7 @@ class Engine:
                                            completed.open, completed.high, completed.low,
                                            completed.close, completed.volume)
             self._on_candle_closed(completed, self.lanes_by_tf.get(tf, []))
+        self._gap_skip = False  # only the gap tick itself is blocked
         self._publish_state(event.ts)
 
     def _check_pending(self, lane: Lane, quote: Quote) -> None:
@@ -195,6 +208,10 @@ class Engine:
                     self._try_open(lane, signal, self.last_quote)
 
     def _try_open(self, lane: Lane, signal: Signal, quote: Quote) -> bool:
+        if self._gap_skip:
+            self.journal.record_signal(quote.ts, self.cfg.symbol, lane.name, "risk_block",
+                                       f"{signal.reason} | blocked: feed gap, stale price")
+            return False
         decision = lane.risk.can_enter(quote.ts)
         if not decision.allowed:
             log.info("[%s] signal blocked by risk: %s", lane.name, decision.reason)

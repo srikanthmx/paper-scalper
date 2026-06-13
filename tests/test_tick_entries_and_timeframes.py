@@ -155,6 +155,9 @@ def test_exit_triggers_on_trade_tick_not_only_quotes(tmp_path) -> None:
     # fired at ~99.95 (first tick past it: 99.94), not allowed to run away
     assert closed == 99.94
     assert entry > 99.9
+
+
+def test_orb_end_to_end_fills_on_tick_not_candle_close(tmp_path) -> None:
     from paper_scalper.engine.daily import DailyStrategy
 
     settings = Settings(db_path=str(tmp_path / "orb.db"), slippage_bps=0.0)
@@ -163,11 +166,12 @@ def test_exit_triggers_on_trade_tick_not_only_quotes(tmp_path) -> None:
     lane = engine.lanes[0]
     t0 = datetime(2026, 6, 12, 13, 30, tzinfo=timezone.utc).timestamp()
     # 13:30 -> 13:47: range builds 13:30-13:44; the post-window candle closes
-    # at 13:46 and arms the OCO stops
+    # at 13:46 and arms the OCO stops. Feed continuously (no gap) so the gap
+    # guard doesn't block the fill.
     for i in range(17 * 60 + 1):
         engine.on_event(quote(t0 + i, 100.0))
     assert len(lane.pending) == 2                         # OCO armed after the window
-    fill_ts = t0 + 18 * 60
+    fill_ts = t0 + 17 * 60 + 1                            # 1s after last tick, no gap
     engine.on_event(quote(fill_ts, 100.2))                # tick through high+buffer
     pos = lane.broker.position
     assert pos is not None and pos.side == "long"
