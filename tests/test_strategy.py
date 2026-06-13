@@ -97,11 +97,11 @@ def test_pipeline_smoke_synthetic_feed(tmp_path) -> None:
             engine.on_event(event)
 
     asyncio.run(run())
-    assert len(engine.lanes) == 7
+    assert len(engine.lanes) == 8
     for lane in engine.lanes:
         assert lane.strategy.snapshot.close > 0  # candles flowed through every lane
     live = journal.get_state("live")
     assert live is not None
     assert set(live["lanes"]) == {"pullback", "momo", "meanrev", "trend", "daily",
-                                  "lorentz", "keltner"}
+                                  "lorentz", "keltner", "tester"}
     journal.close()

@@ -121,13 +121,27 @@ class Engine:
                      state["params"])
 
     def on_event(self, event: Trade | Quote) -> None:
+        # Exits and pending fills must be checked on EVERY price update, not just
+        # quotes. Coinbase sends far more trade ticks than quotes; checking only on
+        # quotes lets stops/targets trigger late (a stop fires well past its level,
+        # turning a 1R loss into several R). A trade tick is marked against the last
+        # known spread so fills stay realistic.
         if isinstance(event, Quote):
             self.last_quote = event
+            mark_quote: Quote | None = event
+        elif self.last_quote is not None:
+            half = (self.last_quote.ask - self.last_quote.bid) / 2
+            mark_quote = Quote(ts=event.ts, symbol=event.symbol,
+                               bid=event.price - half, ask=event.price + half,
+                               bid_size=0.0, ask_size=0.0)
+        else:
+            mark_quote = None  # no spread known yet (no quote seen) — skip exit check
+        if mark_quote is not None:
             for lane in self.lanes:
-                closed = lane.broker.on_quote(event)
+                closed = lane.broker.on_quote(mark_quote)
                 if closed is not None:
                     self._handle_close(lane, closed)
-                self._check_pending(lane, event)
+                self._check_pending(lane, mark_quote)
         for tf, builder in self.builders.items():
             completed = (builder.on_quote(event) if isinstance(event, Quote)
                          else builder.on_trade(event))

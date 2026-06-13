@@ -113,7 +113,48 @@ def test_lanes_receive_their_own_timeframe(tmp_path) -> None:
     assert all(ts % 180 == 0 for ts in counter.candles_seen)
 
 
-def test_orb_end_to_end_fills_on_tick_not_candle_close(tmp_path) -> None:
+class OneShotLong:
+    """Opens a single long on the first candle, fixed 0.1% TP / 0.05% SL."""
+
+    name = "oneshot"
+    timeframe_seconds = 60
+
+    def __init__(self, cfg: Settings) -> None:
+        self.snapshot = Snapshot()
+        self.p: dict = {}
+        self._done = False
+
+    def apply_params(self, new: dict) -> None:
+        pass
+
+    def on_candle(self, candle: Candle, q: Quote | None):
+        self.snapshot = Snapshot(close=candle.close)
+        if self._done:
+            return None
+        self._done = True
+        return Signal(side="long", ts=candle.ts_open + 60, ref_price=candle.close,
+                      sl_pct=0.05, tp_pct=0.10, reason="oneshot", breakeven_after_r=999.0)
+
+
+def test_exit_triggers_on_trade_tick_not_only_quotes(tmp_path) -> None:
+    """A stop must fire on a trade tick that crosses it, even with no new quote —
+    otherwise stops trigger late and losses balloon past 1R."""
+    engine = make_engine(tmp_path, [OneShotLong(Settings(slippage_bps=0.0, fee_bps=0.0))])
+    lane = engine.lanes[0]
+    feed_candle_window(engine, 1_700_000_000.0, 100.0)  # candle closes -> opens long
+    assert lane.broker.position is not None
+    entry = lane.broker.position.entry_price
+    # NO new quotes — only trade ticks. Price slides straight through the stop (~99.95).
+    closed = None
+    for px in (99.98, 99.96, 99.94):
+        engine.on_event(trade(1_700_000_100.0, px))
+        if lane.broker.position is None:
+            closed = px
+            break
+    assert lane.broker.position is None, "stop never fired on trade ticks"
+    # fired at ~99.95 (first tick past it: 99.94), not allowed to run away
+    assert closed == 99.94
+    assert entry > 99.9
     from paper_scalper.engine.daily import DailyStrategy
 
     settings = Settings(db_path=str(tmp_path / "orb.db"), slippage_bps=0.0)

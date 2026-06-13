@@ -38,6 +38,7 @@ class Signal:
     entry_stop: float | None = None
     valid_seconds: int = 60              # pending order lifetime
     allow_tight_stop: bool = False       # bypass the stop-inside-spread guard (test lane)
+    breakeven_after_r: float | None = None  # override cfg; set huge to disable breakeven
 
 
 @dataclass(slots=True)

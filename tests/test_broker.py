@@ -83,6 +83,27 @@ def test_breakeven_stop_arms_and_protects() -> None:
     assert closed.gross_pnl == pytest.approx(99.95 - 100.05)
 
 
+def test_tp_profits_with_breakeven_disabled() -> None:
+    """Tester-style: breakeven off, a long that reaches +20 (TP) closes green;
+    one that drops to -10 (SL) closes red. Proves the raw entry/exit geometry."""
+    broker = PaperBroker(cfg(fee_bps=0.0, slippage_bps=0.5))  # learning mode (live)
+    sig = Signal(side="long", ts=0, ref_price=63500, sl_pct=10 / 63500 * 100,
+                 tp_pct=20 / 63500 * 100, reason="test", breakeven_after_r=999.0)
+    broker.open_position(sig, quote(0, 63499.5, 63500.5), qty=1.0)
+    # ticks up but not to TP, then back toward entry — must NOT exit (breakeven off)
+    assert broker.on_quote(quote(1, 63512, 63513)) is None    # mid 63512.5, +0.6R but no BE
+    assert broker.on_quote(quote(2, 63500, 63501)) is None    # back near entry, still open
+    won = broker.on_quote(quote(3, 63520, 63521))             # mid 63520.5 >= TP 63520
+    assert won is not None and won.reason_exit == "take_profit"
+    assert won.net_pnl > 0                                    # a TP close is PROFITABLE
+
+    broker2 = PaperBroker(cfg(fee_bps=0.0, slippage_bps=0.5))
+    broker2.open_position(sig, quote(0, 63499.5, 63500.5), qty=1.0)
+    lost = broker2.on_quote(quote(1, 63489, 63490))           # mid 63489.5 <= SL 63490
+    assert lost is not None and lost.reason_exit == "stop_loss"
+    assert lost.net_pnl < 0
+
+
 def test_cannot_double_open() -> None:
     broker = PaperBroker(cfg())
     broker.open_position(signal("long", 100), quote(0, 99.95, 100.05), qty=1.0)

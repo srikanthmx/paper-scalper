@@ -44,6 +44,7 @@ class Position:
     mid_ref: float = 0.0         # quote mid at entry — anchor for all exit levels
     r_dist: float = 0.0          # initial risk distance in mid terms
     tp_hits: int = 0             # ladder rungs filled (scale_trail mode)
+    breakeven_after_r: float = 0.6
     breakeven_armed: bool = False
 
     def unrealized(self, quote: Quote) -> float:
@@ -101,6 +102,8 @@ class PaperBroker:
             mode=signal.mode, scale_out_frac=signal.scale_out_frac,
             max_hold_seconds=signal.max_hold_seconds or self.cfg.max_hold_seconds,
             mid_ref=mid, r_dist=mid * signal.sl_pct / 100,
+            breakeven_after_r=(signal.breakeven_after_r if signal.breakeven_after_r
+                               is not None else self.cfg.breakeven_after_r),
         )
         return self.position
 
@@ -117,7 +120,7 @@ class PaperBroker:
         # ── simple mode ──
         # breakeven: once gain >= breakeven_after_r * initial risk, SL moves to entry mid
         if not pos.breakeven_armed:
-            if sign * (mark - pos.mid_ref) >= self.cfg.breakeven_after_r * pos.r_dist:
+            if sign * (mark - pos.mid_ref) >= pos.breakeven_after_r * pos.r_dist:
                 pos.sl_price = pos.mid_ref
                 pos.breakeven_armed = True
         if sign * (mark - pos.tp_price) >= 0:

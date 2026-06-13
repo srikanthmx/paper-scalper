@@ -23,8 +23,8 @@ class TesterStrategy(TunableParams):
         self.cfg = cfg
         self.snapshot = Snapshot()
         self.p = {
-            "target_usd": 50.0,
-            "stop_usd": 25.0,
+            "target_usd": 20.0,
+            "stop_usd": 10.0,
             "max_hold_seconds": 300,
             "follow_candle": 1,   # 1: trade candle direction; 0: always long
         }
@@ -42,6 +42,7 @@ class TesterStrategy(TunableParams):
             side=side, ts=candle.ts_open + self.cfg.candle_seconds, ref_price=px,
             sl_pct=p["stop_usd"] / px * 100, tp_pct=p["target_usd"] / px * 100,
             max_hold_seconds=int(p["max_hold_seconds"]), allow_tight_stop=True,
+            breakeven_after_r=999.0,  # disabled: clean TP/SL/max-hold test, no breakeven exits
             reason=(f"{side} TEST: entry ~{px:.0f}, target {px + (1 if side=='long' else -1)*p['target_usd']:.0f}, "
                     f"stop {px - (1 if side=='long' else -1)*p['stop_usd']:.0f} "
                     f"(+${p['target_usd']:.0f}/-${p['stop_usd']:.0f})"),
