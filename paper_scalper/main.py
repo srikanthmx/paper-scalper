@@ -108,6 +108,45 @@ class Engine:
         self._gap_skip = False  # block new entries on the tick right after a feed gap
         for lane in self.lanes:
             self._sync_params(lane, bootstrap=True)
+        self._warmup_from_history()
+
+    def _warmup_from_history(self) -> None:
+        """Pre-train strategies on stored candles so they're ready immediately
+        instead of warming up live (Lorentzian otherwise needs ~hours of history
+        to fill its kNN training set). Replays candles through on_candle with no
+        quote, building indicator + ML state without opening any trades."""
+        raw = self.journal.candles(limit=20000)
+        if len(raw) < 60:
+            return
+        for tf, lanes in self.lanes_by_tf.items():
+            bars = self._resample(raw, tf)
+            for lane in lanes:
+                for c in bars:
+                    lane.strategy.on_candle(c, None)
+        log.info("warmed up %d lanes from %d stored candles",
+                 len(self.lanes), len(raw))
+
+    @staticmethod
+    def _resample(raw: list[dict], tf: int) -> list[Candle]:
+        out: list[Candle] = []
+        cur: Candle | None = None
+        for k in raw:
+            b = k["ts_open"] - (k["ts_open"] % tf)
+            if cur is None or b > cur.ts_open:
+                if cur is not None:
+                    out.append(cur)
+                cur = Candle(ts_open=b, open=k["open"], high=k["high"], low=k["low"],
+                             close=k["close"], volume=k["volume"],
+                             notional=(k["high"] + k["low"] + k["close"]) / 3 * k["volume"])
+            else:
+                cur.high = max(cur.high, k["high"])
+                cur.low = min(cur.low, k["low"])
+                cur.close = k["close"]
+                cur.volume += k["volume"]
+                cur.notional += (k["high"] + k["low"] + k["close"]) / 3 * k["volume"]
+        if cur is not None:
+            out.append(cur)
+        return out
 
     def _sync_params(self, lane: Lane, bootstrap: bool = False) -> None:
         """Apply dashboard-saved params; tag the lane with the active version."""
