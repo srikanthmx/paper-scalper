@@ -26,7 +26,10 @@ class Settings(BaseSettings):
                                          # risk_per_trade sizing on every BTC trade
     daily_stop_pct: float = 5.0          # only used when enable_risk_halts
     max_consecutive_losses: int = 5      # only used when enable_risk_halts
-    max_hold_seconds: int = 300
+    # Hold must scale with the target: a 1:2 trade needs ~30min for 2R to be
+    # reachable. At 300s, random-entry 1:2 wins only ~8% (proven by backtest) —
+    # the target is physically unreachable before the clock forces a verdict.
+    max_hold_seconds: int = 1800
     cooldown_candles: int = 0            # learning mode (production: 3)
 
     # Strategy filters
