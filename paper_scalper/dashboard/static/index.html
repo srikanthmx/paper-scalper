@@ -130,6 +130,7 @@ tbody tr:hover { background: rgba(110,168,255,.04); }
 .pill.daily { background: rgba(255,121,198,.12); color: #ff79c6; }
 .pill.lorentz { background: rgba(255,184,108,.12); color: #ffb86c; }
 .pill.keltner { background: rgba(189,147,249,.12); color: #bd93f9; }
+.pill.tester { background: rgba(255,200,87,.16); color: var(--amber); }
 .pill.v { background: rgba(125,133,144,.10); color: var(--faint); padding: 2px 7px; }
 .tune-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; padding: 12px 16px 4px; }
 .tune-field label { display: block; font-size: 10.5px; color: var(--faint); font-weight: 600; margin-bottom: 4px; font-family: var(--mono); }
@@ -424,8 +425,8 @@ const signed = x => (x >= 0 ? "+" : "") + usd.format(x);
 const cls = x => x > 0 ? "up" : x < 0 ? "down" : "flat";
 const hms = ts => new Date(ts * 1000).toLocaleTimeString("en-GB");
 const dur = s => `${Math.floor(s / 60)}m${String(Math.round(s % 60)).padStart(2, "0")}s`;
-const STRAT_LETTER = { pullback: "P", momo: "M", meanrev: "R", trend: "T", daily: "D", lorentz: "L", keltner: "K" };
-const STRAT_NAME = { pullback: "Pullback", momo: "Momentum", meanrev: "Mean-rev", trend: "Trend 1:2", daily: "Daily", lorentz: "Lorentzian", keltner: "Keltner" };
+const STRAT_LETTER = { pullback: "P", momo: "M", meanrev: "R", trend: "T", daily: "D", lorentz: "L", keltner: "K", tester: "TEST" };
+const STRAT_NAME = { pullback: "Pullback", momo: "Momentum", meanrev: "Mean-rev", trend: "Trend 1:2", daily: "Daily", lorentz: "Lorentzian", keltner: "Keltner", tester: "Tester" };
 let strat = "all";
 
 document.querySelectorAll("nav button").forEach(b => b.onclick = () => {

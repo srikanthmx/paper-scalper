@@ -37,6 +37,7 @@ class Signal:
     entry_type: str = "market"
     entry_stop: float | None = None
     valid_seconds: int = 60              # pending order lifetime
+    allow_tight_stop: bool = False       # bypass the stop-inside-spread guard (test lane)
 
 
 @dataclass(slots=True)

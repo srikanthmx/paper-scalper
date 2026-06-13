@@ -28,6 +28,7 @@ from paper_scalper.engine.momentum import MomentumStrategy
 from paper_scalper.engine.paper_broker import ClosedTrade, PaperBroker
 from paper_scalper.engine.risk import RiskManager
 from paper_scalper.engine.strategy import Signal, Snapshot, Strategy
+from paper_scalper.engine.tester import TesterStrategy
 from paper_scalper.engine.trend import TrendScalpStrategy
 from paper_scalper.storage.db import Journal
 
@@ -56,10 +57,16 @@ def stop_inside_spread(signal: Signal, quote: Quote, cfg: Settings) -> bool:
     return sl_bps <= entry_cost_bps * 1.2
 
 
-def build_strategies(cfg: Settings) -> list[StrategyProtocol]:
-    return [Strategy(cfg), MomentumStrategy(cfg), MeanReversionStrategy(cfg),
-            TrendScalpStrategy(cfg), DailyStrategy(cfg), LorentzianStrategy(cfg),
-            KeltnerReversionStrategy(cfg)]
+def build_strategies(cfg: Settings, only: str | None = None) -> list[StrategyProtocol]:
+    lanes = [Strategy(cfg), MomentumStrategy(cfg), MeanReversionStrategy(cfg),
+             TrendScalpStrategy(cfg), DailyStrategy(cfg), LorentzianStrategy(cfg),
+             KeltnerReversionStrategy(cfg), TesterStrategy(cfg)]
+    if only:
+        wanted = {n.strip() for n in only.split(",")}
+        lanes = [l for l in lanes if l.name in wanted]
+        if not lanes:
+            raise SystemExit(f"--only {only}: no matching strategies")
+    return lanes
 
 
 class Lane:
@@ -78,10 +85,11 @@ class Lane:
 
 class Engine:
     def __init__(self, cfg: Settings, journal: Journal,
-                 strategies: list[StrategyProtocol] | None = None) -> None:
+                 strategies: list[StrategyProtocol] | None = None,
+                 only: str | None = None) -> None:
         self.cfg = cfg
         self.journal = journal
-        self.lanes = [Lane(s, cfg) for s in (strategies or build_strategies(cfg))]
+        self.lanes = [Lane(s, cfg) for s in (strategies or build_strategies(cfg, only))]
         # one candle builder per timeframe; lanes subscribe to their own TF.
         # cfg.candle_seconds is always built — it feeds the chart journal.
         self.lanes_by_tf: dict[int, list[Lane]] = {}
@@ -179,7 +187,7 @@ class Engine:
             self.journal.record_signal(quote.ts, self.cfg.symbol, lane.name, "risk_block",
                                        f"{signal.reason} | blocked: {decision.reason}")
             return False
-        if stop_inside_spread(signal, quote, self.cfg):
+        if not signal.allow_tight_stop and stop_inside_spread(signal, quote, self.cfg):
             self.journal.record_signal(
                 quote.ts, self.cfg.symbol, lane.name, "risk_block",
                 f"{signal.reason} | blocked: stop {signal.sl_pct * 100:.1f}bps inside "
@@ -274,9 +282,9 @@ class Engine:
             self.journal.record_equity(ts, total, "all")
 
 
-async def run(feed_name: str, cfg: Settings) -> None:
+async def run(feed_name: str, cfg: Settings, only: str | None = None) -> None:
     journal = Journal(cfg.db_path)
-    engine = Engine(cfg, journal)
+    engine = Engine(cfg, journal, only=only)
     if feed_name == "alpaca":
         from paper_scalper.data.alpaca_crypto_feed import AlpacaCryptoFeed
         if not cfg.alpaca_api_key or not cfg.alpaca_api_secret:
@@ -313,6 +321,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Paper-only scalper (no real orders)")
     parser.add_argument("--feed", choices=["alpaca", "coinbase", "synthetic"], default="alpaca")
     parser.add_argument("--symbol", default=None)
+    parser.add_argument("--only", default=None,
+                        help="run only these lanes (comma-separated), pausing all others")
     args = parser.parse_args()
     cfg = Settings()
     if args.symbol:
@@ -320,7 +330,7 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     try:
-        asyncio.run(run(args.feed, cfg))
+        asyncio.run(run(args.feed, cfg, only=args.only))
     except KeyboardInterrupt:
         log.info("stopped by user")
 
