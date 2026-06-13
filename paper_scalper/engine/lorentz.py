@@ -43,7 +43,7 @@ def lorentzian_distance(a: Features, b: Features) -> float:
 
 class LorentzianStrategy(TunableParams):
     name = "lorentz"
-    timeframe_seconds = 180  # 3m candles: kNN features are noise-dominated on 1m
+    timeframe_seconds = 300  # 5m: best faithful-backtest TF (kNN noise-dominated below)
 
     def __init__(self, cfg: Settings) -> None:
         self.cfg = cfg
@@ -55,17 +55,17 @@ class LorentzianStrategy(TunableParams):
         self.snapshot = Snapshot()
         self._history: deque[tuple[Features, int]] = deque(maxlen=MAX_HISTORY)
         self._pending: deque[tuple[Features, float, int]] = deque()  # (feat, close, left)
+        # ORIGINAL Lorentzian exit: hold a fixed number of bars, then exit. No tight
+        # ATR stop (that strangled it in the first, wrong implementation). A wide
+        # safety stop only guards against a disaster move.
         self.p = {
             "pred_threshold": 5,       # |sum of 8 neighbor labels| required (max 8)
             "min_samples": 100,        # labeled candles needed before predicting
             "min_atr_pct": 0.005,
-            "max_atr_pct": 0.60,
+            "max_atr_pct": 1.50,
             "max_spread_bps": cfg.max_spread_bps,
-            "sl_atr_mult": 1.2,
-            "sl_min_pct": 0.10,
-            "sl_max_pct": 0.60,
-            "rr": 2.0,
-            "max_hold_seconds": 1800,  # 1:2 needs room for 2R; 10 bars on 3m TF
+            "hold_bars": 8,            # exit after this many bars (faithful exit)
+            "safety_stop_pct": 1.50,   # wide disaster stop only
         }
 
     def _features(self) -> Features | None:
@@ -130,12 +130,14 @@ class LorentzianStrategy(TunableParams):
             return None
 
         side = "long" if prediction > 0 else "short"
-        sl_pct = min(max(p["sl_atr_mult"] * atr_pct, p["sl_min_pct"]), p["sl_max_pct"])
+        # faithful exit: hold hold_bars then time-out; wide safety stop / far target
+        # so the trade is decided by the holding period, not a tight stop
+        hold = int(p["hold_bars"]) * self.timeframe_seconds
         return Signal(
             side=side, ts=candle.ts_open + self.cfg.candle_seconds, ref_price=px,
-            sl_pct=sl_pct, tp_pct=p["rr"] * sl_pct,
-            max_hold_seconds=int(p["max_hold_seconds"]),
+            sl_pct=p["safety_stop_pct"], tp_pct=p["safety_stop_pct"] * 3,
+            max_hold_seconds=hold,
             reason=(f"{side} lorentzian kNN: prediction {prediction:+d}/{K_NEIGHBORS} "
-                    f"({len(self._history)} samples), rsi {self.rsi14.value:.1f}, "
-                    f"atr {atr_pct:.3f}%"),
+                    f"({len(self._history)} samples), hold {int(p['hold_bars'])} bars, "
+                    f"rsi {self.rsi14.value:.1f}, atr {atr_pct:.3f}%"),
         )
