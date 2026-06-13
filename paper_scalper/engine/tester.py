@@ -23,10 +23,11 @@ class TesterStrategy(TunableParams):
         self.cfg = cfg
         self.snapshot = Snapshot()
         self.p = {
-            "target_usd": 20.0,
-            "stop_usd": 10.0,
+            "target_usd": 25.0,
+            "stop_usd": 25.0,     # symmetric 1:1 so win rate alone tells the story
             "max_hold_seconds": 300,
             "follow_candle": 1,   # 1: trade candle direction; 0: always long
+            "fade": 1,            # 1: FADE the candle (buy red / sell green) — mean-revert
         }
 
     def on_candle(self, candle: Candle, quote: Quote | None) -> Signal | None:
@@ -38,6 +39,8 @@ class TesterStrategy(TunableParams):
         side = "long"
         if p["follow_candle"]:
             side = "long" if candle.close >= candle.open else "short"
+            if p["fade"]:  # invert: fade the candle instead of following it
+                side = "short" if side == "long" else "long"
         return Signal(
             side=side, ts=candle.ts_open + self.cfg.candle_seconds, ref_price=px,
             sl_pct=p["stop_usd"] / px * 100, tp_pct=p["target_usd"] / px * 100,
