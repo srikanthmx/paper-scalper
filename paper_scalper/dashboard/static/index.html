@@ -424,7 +424,9 @@ const money = x => x == null ? "—" : usd.format(x);
 const signed = x => (x >= 0 ? "+" : "") + usd.format(x);
 const cls = x => x > 0 ? "up" : x < 0 ? "down" : "flat";
 const hms = ts => new Date(ts * 1000).toLocaleTimeString("en-GB");
-const dur = s => `${Math.floor(s / 60)}m${String(Math.round(s % 60)).padStart(2, "0")}s`;
+const dur = s => s < 1 ? `${s.toFixed(1)}s`
+  : s < 60 ? `${Math.round(s)}s`
+  : `${Math.floor(s / 60)}m${String(Math.round(s % 60)).padStart(2, "0")}s`;
 const STRAT_LETTER = { pullback: "P", momo: "M", meanrev: "R", trend: "T", daily: "D", lorentz: "L", keltner: "K", tester: "TEST" };
 const STRAT_NAME = { pullback: "Pullback", momo: "Momentum", meanrev: "Mean-rev", trend: "Trend 1:2", daily: "Daily", lorentz: "Lorentzian", keltner: "Keltner", tester: "Tester" };
 let strat = "all";
