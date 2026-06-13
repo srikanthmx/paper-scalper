@@ -17,7 +17,8 @@ class Settings(BaseSettings):
     # in isolation. Re-enable (25bps Alpaca taker) before judging any go/no-go.
     starting_equity: float = 10_000.0
     fee_bps: float = 0.0        # learning mode (Alpaca crypto tier 1 taker: 25.0)
-    slippage_bps: float = 3.0   # kept: slippage is microstructure, not a fee
+    slippage_bps: float = 0.5   # Coinbase tight book (~$3 r/t on BTC). 3.0 was an
+                                # Alpaca-era guess that swamped small-target scalps.
 
     # Risk — LEARNING MODE: halts and cooldowns disabled, trade freely
     enable_risk_halts: bool = False      # True restores daily stop + loss-streak halts
