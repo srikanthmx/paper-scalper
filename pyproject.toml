@@ -5,6 +5,7 @@ description = "Paper-only scalping simulator: Alpaca crypto data (BTC/USD) now, 
 requires-python = ">=3.12"
 dependencies = [
     "websockets>=12.0",
+    "httpx>=0.27",
     "pydantic>=2.7",
     "pydantic-settings>=2.2",
     "fastapi>=0.111",

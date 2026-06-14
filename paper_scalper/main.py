@@ -78,7 +78,15 @@ class Lane:
         self.strategy = strategy
         self.timeframe = getattr(strategy, "timeframe_seconds", cfg.candle_seconds)
         self.risk = RiskManager(cfg)
-        self.broker = PaperBroker(cfg)
+        # Route the designated lane to the Alpaca paper sandbox (real fills); all
+        # other lanes use the in-app simulator. source tags every trade.
+        if cfg.execution_mode == "alpaca_paper" and self.name == cfg.platform_lane:
+            from paper_scalper.broker.alpaca_paper import AlpacaPaperBroker
+            self.broker = AlpacaPaperBroker(cfg, cfg.symbol)
+            self.source = "alpaca_paper"
+        else:
+            self.broker = PaperBroker(cfg)
+            self.source = "app"
         self.version = 0       # active param version (journal param_versions)
         self.open_version = 0  # version the current position was entered under
         self.pending: list[tuple[Signal, float]] = []  # armed stop orders (signal, expiry)
@@ -267,10 +275,14 @@ class Engine:
         if qty <= 0:
             return False
         pos = lane.broker.open_position(signal, quote, qty)
+        if pos is None:  # platform rejected the order (e.g. Alpaca paper)
+            self.journal.record_signal(quote.ts, self.cfg.symbol, lane.name, "risk_block",
+                                       f"{signal.reason} | blocked: platform rejected order")
+            return False
         lane.open_version = lane.version
         lane.pending = []
         self.journal.record_signal(quote.ts, self.cfg.symbol, lane.name, "signal",
-                                   signal.reason)
+                                   f"[{lane.source}] {signal.reason}")
         log.info("[%s] OPEN %s qty=%.6f @ %.2f sl=%.2f tp=%.2f | %s", lane.name,
                  pos.side, pos.qty, pos.entry_price, pos.sl_price, pos.tp_price,
                  signal.reason)
@@ -279,7 +291,7 @@ class Engine:
     def _handle_close(self, lane: Lane, trade: ClosedTrade) -> None:
         lane.risk.on_trade_closed(trade.net_pnl, trade.exit_ts)
         self.journal.record_trade(self.cfg.symbol, lane.name, trade,
-                                  version=lane.open_version)
+                                  version=lane.open_version, source=lane.source)
         self.journal.record_equity(trade.exit_ts, lane.risk.equity, lane.name)
         log.info("[%s] CLOSE %s @ %.2f (%s) net=%.2f fees=%.2f equity=%.2f", lane.name,
                  trade.side, trade.exit_price, trade.reason_exit, trade.net_pnl,
@@ -294,6 +306,7 @@ class Engine:
         return {
             "equity": lane.risk.equity,
             "version": lane.version,
+            "source": lane.source,
             "tf": lane.timeframe,
             "pending": [{"side": s.side, "entry_stop": s.entry_stop, "expiry": exp}
                         for s, exp in lane.pending],
@@ -323,6 +336,8 @@ class Engine:
         self.journal.set_state("live", {
             "ts": ts,
             "symbol": self.cfg.symbol,
+            "execution_mode": self.cfg.execution_mode,
+            "platform_lane": self.cfg.platform_lane,
             "last_price": quote.mid if quote else None,
             "bid": quote.bid if quote else None,
             "ask": quote.ask if quote else None,

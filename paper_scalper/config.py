@@ -13,6 +13,11 @@ class Settings(BaseSettings):
     symbol: str = "BTC/USD"
     candle_seconds: int = 60
 
+    # Execution: "app" = in-app simulator for all lanes; "alpaca_paper" = route the
+    # platform_lane's orders to the Alpaca PAPER sandbox (real fills, no real money).
+    execution_mode: str = "app"
+    platform_lane: str = "meanrev"
+
     # Paper account / costs — LEARNING MODE: fees zeroed to study entry/exit logic
     # in isolation. Re-enable (25bps Alpaca taker) before judging any go/no-go.
     starting_equity: float = 10_000.0

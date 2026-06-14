@@ -67,6 +67,7 @@ CREATE TABLE IF NOT EXISTS candles (
 MIGRATIONS = [
     ("trades", "strategy", "TEXT NOT NULL DEFAULT 'pullback'"),
     ("trades", "version", "INTEGER NOT NULL DEFAULT 0"),
+    ("trades", "source", "TEXT NOT NULL DEFAULT 'app'"),  # 'app' | 'alpaca_paper'
     ("equity_snapshots", "strategy", "TEXT NOT NULL DEFAULT 'all'"),
     ("signal_log", "strategy", "TEXT NOT NULL DEFAULT 'pullback'"),
 ]
@@ -86,13 +87,13 @@ class Journal:
             self._conn.commit()
 
     def record_trade(self, symbol: str, strategy: str, trade: ClosedTrade,
-                     version: int = 0) -> None:
+                     version: int = 0, source: str = "app") -> None:
         with self._lock:
             self._conn.execute(
-                "INSERT INTO trades (symbol, strategy, version, side, qty, entry_ts,"
+                "INSERT INTO trades (symbol, strategy, version, source, side, qty, entry_ts,"
                 " entry_price, exit_ts, exit_price, fees, gross_pnl, net_pnl, net_pnl_pct,"
-                " reason_entry, reason_exit) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                (symbol, strategy, version, trade.side, trade.qty, trade.entry_ts,
+                " reason_entry, reason_exit) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (symbol, strategy, version, source, trade.side, trade.qty, trade.entry_ts,
                  trade.entry_price, trade.exit_ts, trade.exit_price, trade.fees,
                  trade.gross_pnl, trade.net_pnl, trade.net_pnl_pct, trade.reason_entry,
                  trade.reason_exit),

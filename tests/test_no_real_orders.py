@@ -1,9 +1,14 @@
-"""Hard kill switch: the codebase must contain no path to a real broker order.
+"""Kill switch: the codebase must contain no path to a REAL-MONEY broker order.
 
-Two layers:
-1. Static scan — no trading-API hosts or order endpoints anywhere in the package.
-2. Import isolation — the paper broker and engine modules must not import any
-   network library, so they physically cannot send an order.
+Paper-sandbox trading (Alpaca paper) is allowed, isolated to one file, so we can
+validate fills on a platform's matching engine. Live-money trading is forbidden
+everywhere, permanently.
+
+Layers:
+1. No live-money trading host or generic order verb appears in ANY file.
+2. The paper sandbox host / order path may appear ONLY in broker/alpaca_paper.py.
+3. Engine/storage modules import no network library (they physically can't trade).
+4. The paper broker is pinned to the paper host and can never reach the live host.
 """
 
 from __future__ import annotations
@@ -13,16 +18,12 @@ from pathlib import Path
 
 PACKAGE = Path(__file__).resolve().parents[1] / "paper_scalper"
 
-FORBIDDEN_SUBSTRINGS = [
-    # Alpaca trading hosts (data hosts are stream.data./data.alpaca.markets)
-    "api.alpaca.markets",
-    "paper-api.alpaca.markets",
-    "/v2/orders",
-    # Coinbase trading/brokerage hosts (data host is ws-feed.exchange.coinbase.com)
-    "api.exchange.coinbase.com",
+# These must appear in NO source file — live money, ever.
+FORBIDDEN_EVERYWHERE = [
+    "://api.alpaca.markets",        # Alpaca LIVE host (paper is paper-api.alpaca.markets)
+    "api.exchange.coinbase.com",    # Coinbase brokerage/trading
     "api.coinbase.com",
-    # Upstox order/trading endpoints — Upstox is for market data ONLY
-    "api-hft.upstox.com",
+    "api-hft.upstox.com",           # Upstox is market-data ONLY
     "/order/place",
     "/order/modify",
     "/order/cancel",
@@ -32,13 +33,17 @@ FORBIDDEN_SUBSTRINGS = [
     "create_order",
 ]
 
+# Paper-sandbox order references — allowed, but ONLY inside the paper broker.
+PAPER_ONLY = ["paper-api.alpaca.markets", "/v2/orders"]
+PAPER_BROKER_FILE = "alpaca_paper.py"
+
 NETWORK_MODULES = {
     "websockets", "aiohttp", "httpx", "requests", "urllib", "urllib3",
     "socket", "http", "ssl",
 }
-
-# Only feed adapters and the dashboard may touch the network.
-NETWORK_ALLOWED_FILES = {"alpaca_crypto_feed.py", "coinbase_feed.py", "app.py"}
+# Feed adapters, the dashboard, and the paper-sandbox broker may touch the network.
+NETWORK_ALLOWED_FILES = {"alpaca_crypto_feed.py", "coinbase_feed.py", "app.py",
+                         PAPER_BROKER_FILE}
 
 
 def _py_files() -> list[Path]:
@@ -47,11 +52,21 @@ def _py_files() -> list[Path]:
     return files
 
 
-def test_no_trading_endpoints_anywhere() -> None:
+def test_no_live_money_trading_anywhere() -> None:
     for path in _py_files():
         source = path.read_text().lower()
-        for needle in FORBIDDEN_SUBSTRINGS:
-            assert needle not in source, f"forbidden trading reference '{needle}' in {path}"
+        for needle in FORBIDDEN_EVERYWHERE:
+            assert needle.lower() not in source, f"forbidden live-money ref '{needle}' in {path}"
+
+
+def test_paper_order_refs_only_in_paper_broker() -> None:
+    for path in _py_files():
+        source = path.read_text().lower()
+        for needle in PAPER_ONLY:
+            if needle.lower() in source:
+                assert path.name == PAPER_BROKER_FILE, (
+                    f"paper-order reference '{needle}' must live only in {PAPER_BROKER_FILE}, "
+                    f"found in {path}")
 
 
 def test_engine_modules_cannot_reach_network() -> None:
@@ -76,3 +91,13 @@ def test_data_feeds_only_connect_to_data_hosts() -> None:
     assert alpaca_crypto_feed.WS_URL.startswith("wss://stream.data.alpaca.markets")
     assert coinbase_feed.ALLOWED_HOST == "ws-feed.exchange.coinbase.com"
     assert coinbase_feed.WS_URL.startswith("wss://ws-feed.exchange.coinbase.com")
+
+
+def test_paper_broker_pinned_to_paper_host_never_live() -> None:
+    from paper_scalper.broker import alpaca_paper
+
+    assert alpaca_paper.PAPER_HOST == "paper-api.alpaca.markets"
+    assert alpaca_paper.BASE_URL == "https://paper-api.alpaca.markets"
+    # the live-money host (with protocol) must never be the base URL
+    assert "://api.alpaca.markets" not in alpaca_paper.BASE_URL
+    assert alpaca_paper.BASE_URL.startswith("https://paper-")
