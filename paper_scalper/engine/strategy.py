@@ -88,6 +88,8 @@ class Strategy(TunableParams):
             "sl_max_pct": cfg.sl_max_pct,
             "tp_min_pct": cfg.tp_min_pct,
             "tp_max_pct": cfg.tp_max_pct,
+            "rr": 2.0,                # TP1 at +2R, then trail (scale-trail ladder)
+            "scale_out_frac": 0.5,
             "max_hold_seconds": cfg.max_hold_seconds,
         }
 
@@ -153,13 +155,14 @@ class Strategy(TunableParams):
             snap.rejects.append("no setup")
             return None
 
+        # scale-trail ladder — the trend lane proved this structure wins (+$133 live)
         sl_pct = min(max(p["sl_atr_mult"] * atr_pct, p["sl_min_pct"]), p["sl_max_pct"])
-        tp_pct = min(max(p["tp_atr_mult"] * atr_pct, p["tp_min_pct"]), p["tp_max_pct"])
         return Signal(
             side=side, ts=candle.ts_open + self.cfg.candle_seconds, ref_price=px,
-            sl_pct=sl_pct, tp_pct=tp_pct,
+            sl_pct=sl_pct, tp_pct=p["rr"] * sl_pct,
+            mode="scale_trail", scale_out_frac=p["scale_out_frac"],
             max_hold_seconds=int(p["max_hold_seconds"]),
             reason=(f"{side}: px {px:.2f} vs vwap {vwap:.2f}, ema sep {sep_bps:.1f}bps, "
                     f"rsi {rsi:.1f}, vol {candle.volume:.3f} vs avg {vol_avg:.3f}, "
-                    f"atr {atr_pct:.3f}%"),
+                    f"atr {atr_pct:.3f}% (1:{p['rr']} ladder)"),
         )

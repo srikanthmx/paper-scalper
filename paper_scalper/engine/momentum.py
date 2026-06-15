@@ -37,6 +37,8 @@ class MomentumStrategy(TunableParams):
             "sl_max_pct": 0.50,
             "tp_min_pct": 0.35,
             "tp_max_pct": 1.00,
+            "rr": 2.0,                   # TP1 at +2R, then trail (scale-trail ladder)
+            "scale_out_frac": 0.5,       # bank half at TP1
             "max_hold_seconds": cfg.max_hold_seconds,
             "max_candle_atr_mult": 3.5,  # chase guard: a breakout candle may be big, but
         }                                # not a vertical blow-off
@@ -80,14 +82,17 @@ class MomentumStrategy(TunableParams):
             snap.rejects.append("no breakout")
             return None
 
+        # scale-trail ladder (the structure that makes the trend lane profitable):
+        # a breakout that works should run, so bank a partial at +2R and trail the rest.
         sl_pct = min(max(p["sl_atr_mult"] * atr_pct, p["sl_min_pct"]), p["sl_max_pct"])
-        tp_pct = min(max(p["tp_atr_mult"] * atr_pct, p["tp_min_pct"]), p["tp_max_pct"])
         ref = prior_high if side == "long" else prior_low
         return Signal(
             side=side, ts=candle.ts_open + self.cfg.candle_seconds, ref_price=px,
-            sl_pct=sl_pct, tp_pct=tp_pct,
+            sl_pct=sl_pct, tp_pct=p["rr"] * sl_pct,
+            mode="scale_trail", scale_out_frac=p["scale_out_frac"],
             max_hold_seconds=int(p["max_hold_seconds"]),
             reason=(f"{side} breakout: close {px:.2f} vs {lookback}-bar "
                     f"{'high' if side == 'long' else 'low'} {ref:.2f}, "
-                    f"vol {candle.volume:.3f} vs avg {vol_avg:.3f}, atr {atr_pct:.3f}%"),
+                    f"vol {candle.volume:.3f} vs avg {vol_avg:.3f}, atr {atr_pct:.3f}% "
+                    f"(1:{p['rr']} ladder)"),
         )
