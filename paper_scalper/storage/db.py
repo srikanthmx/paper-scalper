@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
+import time
 from typing import Any
 
 from paper_scalper.engine.paper_broker import ClosedTrade
@@ -50,6 +51,15 @@ CREATE TABLE IF NOT EXISTS param_versions (
     note TEXT NOT NULL DEFAULT '',
     created_ts REAL NOT NULL,
     PRIMARY KEY (strategy, version)
+);
+CREATE TABLE IF NOT EXISTS trade_archive (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    archive_ts REAL NOT NULL,        -- when this row was archived
+    reset_label TEXT NOT NULL,       -- which reset/era it belonged to
+    symbol TEXT, strategy TEXT, version INTEGER, source TEXT,
+    side TEXT, qty REAL, entry_ts REAL, entry_price REAL, exit_ts REAL,
+    exit_price REAL, fees REAL, gross_pnl REAL, net_pnl REAL, net_pnl_pct REAL,
+    reason_entry TEXT, reason_exit TEXT
 );
 CREATE TABLE IF NOT EXISTS candles (
     ts_open REAL NOT NULL,
@@ -291,6 +301,49 @@ class Journal:
                 if (sub := [t for t in trades if t["side"] == side])
             },
         }
+
+    def archive_trades(self, label: str) -> int:
+        """Append all current trades into the permanent, never-cleared archive.
+        Returns how many rows were archived. Call this BEFORE any reset."""
+        now = time.time()
+        with self._lock:
+            cur = self._conn.execute(
+                "INSERT INTO trade_archive (archive_ts, reset_label, symbol, strategy,"
+                " version, source, side, qty, entry_ts, entry_price, exit_ts, exit_price,"
+                " fees, gross_pnl, net_pnl, net_pnl_pct, reason_entry, reason_exit)"
+                " SELECT ?, ?, symbol, strategy, version, source, side, qty, entry_ts,"
+                " entry_price, exit_ts, exit_price, fees, gross_pnl, net_pnl, net_pnl_pct,"
+                " reason_entry, reason_exit FROM trades", (now, label))
+            self._conn.commit()
+            return cur.rowcount
+
+    def reset_trades(self, label: str) -> int:
+        """Archive then clear trades/equity/signals. The ONLY safe way to reset —
+        never lose history again. Returns rows archived."""
+        n = self.archive_trades(label)
+        with self._lock:
+            for table in ("trades", "equity_snapshots", "signal_log"):
+                self._conn.execute(f"DELETE FROM {table}")
+            self._conn.execute("DELETE FROM state WHERE key='live'")
+            self._conn.commit()
+        return n
+
+    def archived_trades(self, limit: int = 1_000_000) -> list[dict[str, Any]]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM trade_archive ORDER BY exit_ts LIMIT ?", (limit,)).fetchall()
+        return [dict(r) for r in rows]
+
+    def insert_archived(self, rows: list[dict[str, Any]]) -> None:
+        """Backfill archive rows (e.g. ingesting old snapshot DBs)."""
+        cols = ("archive_ts", "reset_label", "symbol", "strategy", "version", "source",
+                "side", "qty", "entry_ts", "entry_price", "exit_ts", "exit_price",
+                "fees", "gross_pnl", "net_pnl", "net_pnl_pct", "reason_entry", "reason_exit")
+        with self._lock:
+            self._conn.executemany(
+                f"INSERT INTO trade_archive ({','.join(cols)}) VALUES ({','.join('?'*len(cols))})",
+                [tuple(r.get(c) for c in cols) for r in rows])
+            self._conn.commit()
 
     def close(self) -> None:
         with self._lock:
