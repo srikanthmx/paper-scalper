@@ -529,21 +529,29 @@ function kpiCard(label, value, klass = "", sub = "") {
     <div class="value ${klass}">${value}</div>${sub ? `<div class="sub">${sub}</div>` : ""}</div>`;
 }
 function tradeRows(trades, full) {
-  return trades.map(t => `<tr>
+  // tint fills of the same position so a scale-out reads as one trade
+  let prevPid = null, band = false;
+  return trades.map(t => {
+    if (t.position_id && t.position_id !== prevPid) { band = !band; prevPid = t.position_id; }
+    const lifecycle = t.event || t.reason_exit.replaceAll("_", " ");
+    const slTxt = t.sl_after ? ` <span class="flat">SL ${fmt(t.sl_after)}</span>` : "";
+    const lots = t.lots ? `${(+t.lots).toFixed(t.lots % 1 ? 2 : 0)}` : "—";
+    return `<tr style="${band && t.position_id ? "box-shadow:inset 3px 0 0 var(--accent)" : ""}">
     <td>${hms(t.exit_ts)}</td>
     <td style="text-align:left"><span class="pill ${t.strategy}">${STRAT_NAME[t.strategy] || t.strategy}</span> <span class="pill v">v${t.version ?? 0}</span>${t.source === "alpaca_paper" ? ' <span class="pill src-alpaca_paper">ALPACA</span>' : ""}</td>
     <td style="text-align:left"><span class="pill ${t.side}">${t.side}</span></td>
-    ${full ? `<td>${fmt(t.qty, 6)}</td>` : ""}
+    ${full ? `<td>${lots}</td>` : ""}
     <td>${fmt(t.entry_price)}</td><td>${fmt(t.exit_price)}</td>
-    ${full ? `<td>${dur(t.exit_ts - t.entry_ts)}</td><td class="${cls(t.gross_pnl)}">${fmt(t.gross_pnl)}</td><td>${fmt(t.fees)}</td>` : ""}
+    ${full ? `<td>${dur(t.exit_ts - t.entry_ts)}</td><td class="${cls(t.gross_pnl)}">${fmt(t.gross_pnl)}</td>` : ""}
     <td class="${cls(t.net_pnl)}">${fmt(t.net_pnl)}</td>
     <td class="${cls(t.net_pnl_pct)}">${fmt(t.net_pnl_pct, 3)}%</td>
-    <td style="text-align:left"><span class="pill gray">${t.reason_exit.replaceAll("_", " ")}</span></td>
-  </tr>`).join("");
+    <td style="text-align:left;white-space:normal"><span class="pill gray">${lifecycle}</span>${slTxt}</td>
+  </tr>`;
+  }).join("");
 }
 const tradeHead = full => `<thead><tr>
-  <th>Exit</th><th>Strategy</th><th>Side</th>${full ? "<th>Qty</th>" : ""}<th>Entry</th><th>Exit px</th>
-  ${full ? "<th>Held</th><th>Gross $</th><th>Fees $</th>" : ""}<th>Net $</th><th>Net %</th><th>Reason</th>
+  <th>Exit</th><th>Strategy</th><th>Side</th>${full ? "<th>Lots</th>" : ""}<th>Entry</th><th>Exit px</th>
+  ${full ? "<th>Held</th><th>Gross $</th>" : ""}<th>Net $</th><th>Net %</th><th>Lifecycle / trailing SL</th>
 </tr></thead>`;
 function barList(el, entries, total, colorFn) {
   el.innerHTML = entries.length ? entries.map(([name, n]) => `<div class="bar-row">
@@ -666,9 +674,10 @@ async function refresh() {
     $("opentrades").innerHTML = head + opens.map(([n, l]) => {
       const p = l.position;
       const up = l.unrealized || 0;
+      const lots = p.lots_total ? ` <span class="flat" style="font-size:11px">${(+p.lots_remaining).toFixed(p.lots_remaining%1?1:0)}/${p.lots_total} lots</span>` : "";
       return `<div class="ot-row">
         <span><span class="pill ${n}">${STRAT_NAME[n] || n}</span></span>
-        <span><span class="pill ${p.side}">${p.side.toUpperCase()}</span></span>
+        <span><span class="pill ${p.side}">${p.side.toUpperCase()}</span>${lots}</span>
         <span class="num">${fmt(p.entry_price)}</span>
         <span class="num"><span class="down">${fmt(p.sl)}</span> / <span class="up">${fmt(p.tp)}</span></span>
         <span class="num ot-live">${px ? fmt(px) : "—"}</span>

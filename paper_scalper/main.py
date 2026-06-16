@@ -316,6 +316,8 @@ class Engine:
             "position": None if pos is None else {
                 "side": pos.side, "qty": pos.qty, "entry_price": pos.entry_price,
                 "sl": pos.sl_price, "tp": pos.tp_price, "entry_ts": pos.entry_ts,
+                "lots_remaining": pos.lots_remaining, "lots_total": pos.lots_total,
+                "position_id": pos.position_id,
             },
         }
 

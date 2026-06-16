@@ -12,7 +12,7 @@ from tests.test_strategy import candle
 
 def cfg(**overrides) -> Settings:
     base = dict(fee_bps=0.0, slippage_bps=0.0, max_hold_seconds=300,
-                trend_rr=2.0, trend_scale_out_frac=0.5)
+                trend_rr=2.0, trend_scale_out_frac=0.5, use_lots=False)
     base.update(overrides)
     return Settings(**base)
 

@@ -78,6 +78,10 @@ MIGRATIONS = [
     ("trades", "strategy", "TEXT NOT NULL DEFAULT 'pullback'"),
     ("trades", "version", "INTEGER NOT NULL DEFAULT 0"),
     ("trades", "source", "TEXT NOT NULL DEFAULT 'app'"),  # 'app' | 'alpaca_paper'
+    ("trades", "position_id", "TEXT NOT NULL DEFAULT ''"),  # ties partial fills together
+    ("trades", "lots", "REAL NOT NULL DEFAULT 0"),         # lots closed in this fill
+    ("trades", "sl_after", "REAL NOT NULL DEFAULT 0"),     # trailing stop after this event
+    ("trades", "event", "TEXT NOT NULL DEFAULT ''"),       # human lifecycle label
     ("equity_snapshots", "strategy", "TEXT NOT NULL DEFAULT 'all'"),
     ("signal_log", "strategy", "TEXT NOT NULL DEFAULT 'pullback'"),
 ]
@@ -102,11 +106,13 @@ class Journal:
             self._conn.execute(
                 "INSERT INTO trades (symbol, strategy, version, source, side, qty, entry_ts,"
                 " entry_price, exit_ts, exit_price, fees, gross_pnl, net_pnl, net_pnl_pct,"
-                " reason_entry, reason_exit) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                " reason_entry, reason_exit, position_id, lots, sl_after, event)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (symbol, strategy, version, source, trade.side, trade.qty, trade.entry_ts,
                  trade.entry_price, trade.exit_ts, trade.exit_price, trade.fees,
                  trade.gross_pnl, trade.net_pnl, trade.net_pnl_pct, trade.reason_entry,
-                 trade.reason_exit),
+                 trade.reason_exit, trade.position_id, trade.lots, trade.sl_after,
+                 trade.event),
             )
             self._conn.commit()
 

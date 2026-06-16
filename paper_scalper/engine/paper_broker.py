@@ -21,11 +21,16 @@ FILLS stay honest: bid/ask plus slippage, so costs still land in PnL.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import uuid
+from dataclasses import dataclass, field
 
 from paper_scalper.config import Settings
 from paper_scalper.data.normalizer import Quote
 from paper_scalper.engine.strategy import Side, Signal
+
+
+def _parse_lots(spec: str) -> tuple[int, ...]:
+    return tuple(int(x) for x in spec.split(",") if x.strip())
 
 
 @dataclass(slots=True)
@@ -46,6 +51,12 @@ class Position:
     tp_hits: int = 0             # ladder rungs filled (scale_trail mode)
     breakeven_after_r: float = 0.6
     breakeven_armed: bool = False
+    # lot model — every position is a whole number of equal lots
+    position_id: str = field(default_factory=lambda: uuid.uuid4().hex[:8])
+    lots_total: int = 1
+    lots_remaining: float = 1.0
+    lot_qty: float = 0.0         # qty per lot
+    scale_lots: tuple[int, ...] = ()  # lots to cut at TP1, TP2, …; rest trails
 
     def unrealized(self, quote: Quote) -> float:
         exit_px = quote.bid if self.side == "long" else quote.ask
@@ -66,6 +77,12 @@ class ClosedTrade:
     net_pnl: float
     reason_entry: str
     reason_exit: str
+    # lifecycle: ties partial fills of one position together and shows the trail
+    position_id: str = ""
+    lots: float = 0.0            # lots closed in THIS fill
+    lots_left: float = 0.0       # lots still open after this fill
+    sl_after: float = 0.0        # where the trailing stop sits after this event
+    event: str = ""              # human label, e.g. "TP1: cut 2 lots, SL→entry"
 
     @property
     def net_pnl_pct(self) -> float:
@@ -94,6 +111,14 @@ class PaperBroker:
         fill = self._slip(raw, signal.side, entering=True)
         sign = 1.0 if signal.side == "long" else -1.0
         mid = quote.mid
+        # lot mode: fixed lots of fixed notional; ignore the continuous qty.
+        if self.cfg.use_lots:
+            lots_total = self.cfg.lots_per_entry
+            lot_qty = self.cfg.lot_size_usd / fill
+            qty = lots_total * lot_qty
+            scale_lots = _parse_lots(self.cfg.scale_lots)
+        else:
+            lots_total, lot_qty, scale_lots = 1, qty, ()
         self.position = Position(
             side=signal.side, qty=qty, entry_ts=quote.ts, entry_price=fill,
             sl_price=mid * (1 - sign * signal.sl_pct / 100),
@@ -104,6 +129,8 @@ class PaperBroker:
             mid_ref=mid, r_dist=mid * signal.sl_pct / 100,
             breakeven_after_r=(signal.breakeven_after_r if signal.breakeven_after_r
                                is not None else self.cfg.breakeven_after_r),
+            lots_total=lots_total, lots_remaining=float(lots_total), lot_qty=lot_qty,
+            scale_lots=scale_lots,
         )
         return self.position
 
@@ -135,18 +162,29 @@ class PaperBroker:
     def _on_quote_scale_trail(self, quote: Quote, pos: Position, mark: float,
                               sign: float) -> ClosedTrade | None:
         if sign * (mark - pos.tp_price) >= 0:
-            # rung filled: close a fraction, SL trails to the previous rung,
-            # next TP goes one rung (2R) further out
-            if pos.tp_hits == 0:
-                step = sign * (pos.tp_price - pos.mid_ref)  # rr * r_dist
-            else:
-                step = sign * (pos.tp_price - pos.sl_price) / 2
-            trade = self._close_fraction(quote, pos.scale_out_frac, "partial_tp")
+            step = (sign * (pos.tp_price - pos.mid_ref) if pos.tp_hits == 0
+                    else sign * (pos.tp_price - pos.sl_price) / 2)
+            rung = pos.tp_hits
             pos.tp_hits += 1
-            # SL: entry after rung 1 ("same price as bought"), then previous TP
+            # SL trails: entry after rung 1 ("same price as bought"), then previous TP
             pos.sl_price = pos.mid_ref + sign * (pos.tp_hits - 1) * step
             pos.tp_price = pos.mid_ref + sign * (pos.tp_hits + 1) * step
-            return trade
+            sl_label = "entry" if pos.tp_hits == 1 else f"+{pos.tp_hits - 1}R rung"
+            if not self.cfg.use_lots:
+                # continuous mode (backtests): bank scale_out_frac of the remainder
+                return self._close_fraction(quote, pos.scale_out_frac, "partial_tp",
+                                            f"TP{pos.tp_hits}, SL→{sl_label}")
+            # lot mode: cut whole lots per schedule; remainder just trails
+            cut = pos.scale_lots[rung] if rung < len(pos.scale_lots) else 0
+            cut = min(cut, pos.lots_remaining)
+            if cut > 0:
+                event = (f"TP{pos.tp_hits}: cut {cut:g} lot{'s' if cut != 1 else ''}, "
+                         f"SL→{sl_label}")
+                trade = self._close_lots(quote, cut, "partial_tp", event)
+                if pos.lots_remaining <= 1e-9:  # schedule emptied the position
+                    self.position = None
+                return trade
+            return None  # schedule exhausted: the runner just trails, no close
         if sign * (mark - pos.sl_price) <= 0:
             reason = "trailing_stop" if pos.tp_hits > 0 else "stop_loss"
             return self._close(quote, reason)
@@ -154,7 +192,8 @@ class PaperBroker:
             return self._close(quote, "max_hold")
         return None
 
-    def _close_fraction(self, quote: Quote, frac: float, reason: str) -> ClosedTrade:
+    def _close_fraction(self, quote: Quote, frac: float, reason: str,
+                        event: str = "") -> ClosedTrade:
         pos = self.position
         assert pos is not None
         raw = quote.bid if pos.side == "long" else quote.ask
@@ -172,6 +211,32 @@ class PaperBroker:
             fees=entry_fee_part + exit_fee, gross_pnl=gross,
             net_pnl=gross - entry_fee_part - exit_fee,
             reason_entry=pos.reason_entry, reason_exit=reason,
+            position_id=pos.position_id, sl_after=pos.sl_price, event=event,
+        )
+
+    def _close_lots(self, quote: Quote, lots: float, reason: str,
+                    event: str) -> ClosedTrade:
+        pos = self.position
+        assert pos is not None
+        raw = quote.bid if pos.side == "long" else quote.ask
+        fill = self._slip(raw, pos.side, entering=False)
+        close_qty = lots * pos.lot_qty
+        frac = close_qty / pos.qty if pos.qty else 0.0
+        entry_fee_part = pos.entry_fee * frac
+        exit_fee = self._fee(fill, close_qty)
+        sign = 1.0 if pos.side == "long" else -1.0
+        gross = sign * (fill - pos.entry_price) * close_qty
+        pos.qty -= close_qty
+        pos.entry_fee -= entry_fee_part
+        pos.lots_remaining -= lots
+        return ClosedTrade(
+            side=pos.side, qty=close_qty, entry_ts=pos.entry_ts,
+            entry_price=pos.entry_price, exit_ts=quote.ts, exit_price=fill,
+            fees=entry_fee_part + exit_fee, gross_pnl=gross,
+            net_pnl=gross - entry_fee_part - exit_fee,
+            reason_entry=pos.reason_entry, reason_exit=reason,
+            position_id=pos.position_id, lots=lots, lots_left=pos.lots_remaining,
+            sl_after=pos.sl_price, event=event,
         )
 
     def _close(self, quote: Quote, reason: str) -> ClosedTrade:
@@ -188,8 +253,13 @@ class PaperBroker:
         sign = 1.0 if pos.side == "long" else -1.0
         gross = sign * (fill - pos.entry_price) * pos.qty
         fees = pos.entry_fee + exit_fee
+        lots = pos.lots_remaining
+        label = {"trailing_stop": "trail stop", "stop_loss": "stopped",
+                 "max_hold": "time exit", "take_profit": "target"}.get(reason, reason)
         return ClosedTrade(
             side=pos.side, qty=pos.qty, entry_ts=pos.entry_ts, entry_price=pos.entry_price,
             exit_ts=quote.ts, exit_price=fill, fees=fees, gross_pnl=gross,
             net_pnl=gross - fees, reason_entry=pos.reason_entry, reason_exit=reason,
+            position_id=pos.position_id, lots=lots, lots_left=0.0,
+            sl_after=pos.sl_price, event=f"{label}: {lots:g} lot{'s' if lots != 1 else ''} out",
         )

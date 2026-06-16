@@ -13,7 +13,8 @@ from paper_scalper.engine.strategy import Signal
 
 
 def cfg(**overrides) -> Settings:
-    base = dict(fee_bps=25.0, slippage_bps=0.0, max_hold_seconds=300, breakeven_after_r=100.0)
+    base = dict(fee_bps=25.0, slippage_bps=0.0, max_hold_seconds=300,
+                breakeven_after_r=100.0, use_lots=False)  # continuous qty for price math
     base.update(overrides)
     return Settings(**base)
 

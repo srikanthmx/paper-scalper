@@ -25,9 +25,18 @@ class Settings(BaseSettings):
     slippage_bps: float = 0.5   # Coinbase tight book (~$3 r/t on BTC). 3.0 was an
                                 # Alpaca-era guess that swamped small-target scalps.
 
+    # Position sizing — LOT MODE (learnable, reportable): every entry is a fixed
+    # number of equal lots, scaled out in whole lots at each target. No more
+    # random fractional quantities. e.g. 4 lots of $250 = $1000/trade; at TP1 cut
+    # 2 lots, at TP2 cut 1, the last lot trails.
+    use_lots: bool = True
+    lots_per_entry: int = 4
+    lot_size_usd: float = 250.0          # notional per lot
+    scale_lots: str = "2,1"              # lots to cut at TP1, TP2, …; remainder trails
+
     # Risk — LEARNING MODE: halts and cooldowns disabled, trade freely
     enable_risk_halts: bool = False      # True restores daily stop + loss-streak halts
-    risk_per_trade_pct: float = 0.5      # % of equity risked at SL per trade
+    risk_per_trade_pct: float = 0.5      # % of equity risked at SL (continuous mode only)
     max_notional_fraction: float = 2.0   # paper leverage cap; at 0.5 it silently overrode
                                          # risk_per_trade sizing on every BTC trade
     daily_stop_pct: float = 5.0          # only used when enable_risk_halts
