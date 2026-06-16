@@ -245,7 +245,9 @@ def research_deploy(body: DeployBody) -> dict:
 
 @app.get("/", response_class=FileResponse)
 def index() -> FileResponse:
-    return FileResponse(_STATIC / "index.html")
+    # no-store so the browser never shows a stale dashboard after an update
+    return FileResponse(_STATIC / "index.html",
+                        headers={"Cache-Control": "no-store, must-revalidate"})
 
 
 def main() -> None:
