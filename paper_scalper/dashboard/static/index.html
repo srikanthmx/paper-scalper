@@ -143,6 +143,28 @@ tbody tr:hover { background: rgba(110,168,255,.04); }
 .ot-row .num { font-family: var(--mono); }
 .ot-live { animation: otpulse 2s infinite; }
 @keyframes otpulse { 0%,100% { opacity: 1; } 50% { opacity: .55; } }
+
+/* rich trades view */
+.tsum { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
+.tsum .chip { background: linear-gradient(180deg, var(--panel-2), var(--panel));
+  border: 1px solid var(--border-soft); border-radius: 12px; padding: 9px 14px; }
+.tsum .chip .l { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); }
+.tsum .chip .v { font-family: var(--mono); font-size: 16px; font-weight: 600; }
+.tbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; align-items: center; }
+.tbar input, .tbar select { background: var(--panel-2); border: 1px solid var(--border);
+  color: var(--text); font: inherit; font-size: 12.5px; padding: 7px 10px; border-radius: 9px; }
+.tbar input { flex: 1; min-width: 180px; }
+.tbar input:focus, .tbar select:focus { outline: none; border-color: var(--accent); }
+.tbar-hint { color: var(--faint); font-size: 12px; margin-left: auto; font-family: var(--mono); }
+#trades-table th { cursor: pointer; user-select: none; }
+#trades-table th:hover { color: var(--accent); }
+#trades-table th .ar { opacity: .5; font-size: 9px; }
+tr.open-row { background: rgba(110,168,255,.05); }
+tr.pos-parent { cursor: pointer; }
+tr.pos-parent:hover { background: rgba(110,168,255,.06); }
+tr.pos-parent .exp { color: var(--faint); font-family: var(--mono); }
+tr.fill-child td { font-size: 11.5px; color: var(--muted); background: rgba(0,0,0,.15); }
+tr.fill-child td:first-child { padding-left: 28px; }
 .pill.v { background: rgba(125,133,144,.10); color: var(--faint); padding: 2px 7px; }
 .tune-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; padding: 12px 16px 4px; }
 .tune-field label { display: block; font-size: 10.5px; color: var(--faint); font-weight: 600; margin-bottom: 4px; font-family: var(--mono); }
@@ -357,10 +379,18 @@ footer { text-align: center; color: var(--faint); font-size: 11.5px; padding: 24
     </div>
   </section>
 
-  <!-- ════ TRADES ════ -->
+  <!-- ════ TRADES (rich, consolidated) ════ -->
   <section class="tab" id="tab-trades">
+    <div class="tsum" id="tsum"></div>
+    <div class="tbar">
+      <input type="search" id="tsearch" placeholder="🔍 filter… (strategy, side, reason)">
+      <select id="tf-strat"><option value="">All strategies</option></select>
+      <select id="tf-side"><option value="">Long &amp; short</option><option value="long">Long</option><option value="short">Short</option></select>
+      <select id="tf-out"><option value="">Wins &amp; losses</option><option value="win">Wins</option><option value="loss">Losses</option></select>
+      <select id="tf-state"><option value="">Open &amp; closed</option><option value="open">Open only</option><option value="closed">Closed only</option></select>
+      <span class="tbar-hint" id="tcount"></span>
+    </div>
     <div class="card span12">
-      <div class="card-h">Trade journal <span class="hint" id="trades-count"></span></div>
       <div style="overflow-x:auto" id="trades-table"></div>
     </div>
   </section>
@@ -454,6 +484,141 @@ document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
   resizeCharts();
 });
 /* signal-feed local filters (independent of the global strategy pills) */
+/* ── rich consolidated Trades view ── */
+let lastTrades = [], lastLanes = {}, lastLast = null;
+let tSort = { col: "exit_ts", dir: -1 }, tExpanded = new Set();
+const dt = ts => { const d = new Date(ts * 1000);
+  return `${String(d.getMonth()+1).padStart(2,"0")}/${String(d.getDate()).padStart(2,"0")} ${d.toLocaleTimeString("en-GB")}`; };
+
+function groupPositions(trades) {
+  // group scale-out fills by position_id into one position; lone trades stay single
+  const groups = {};
+  for (const t of trades) {
+    const key = t.position_id || ("solo-" + t.entry_ts + t.strategy + t.exit_ts);
+    (groups[key] = groups[key] || []).push(t);
+  }
+  return Object.entries(groups).map(([id, fills]) => {
+    fills.sort((a, b) => a.exit_ts - b.exit_ts);
+    const f0 = fills[0];
+    return {
+      id, fills, open: false, strategy: f0.strategy, version: f0.version, side: f0.side,
+      source: f0.source, entry_ts: f0.entry_ts, entry_price: f0.entry_price,
+      exit_ts: fills[fills.length - 1].exit_ts, net_pnl: fills.reduce((s, f) => s + f.net_pnl, 0),
+      lots: fills.reduce((s, f) => s + (+f.lots || 0), 0),
+      net_pct: fills.reduce((s, f) => s + (f.net_pnl_pct || 0), 0),
+      reason: fills[fills.length - 1].reason_exit, multi: fills.length > 1,
+    };
+  });
+}
+
+function openPositionRows() {
+  return Object.entries(lastLanes).filter(([, l]) => l.position).map(([n, l]) => {
+    const p = l.position;
+    return { id: "open-" + n, fills: [], open: true, strategy: n, version: l.version,
+      side: p.side, source: l.source, entry_ts: p.entry_ts, entry_price: p.entry_price,
+      exit_ts: null, net_pnl: l.unrealized || 0, lots: p.lots_remaining,
+      lots_total: p.lots_total, sl: p.sl, tp: p.tp, reason: "open", multi: false };
+  });
+}
+
+function renderRichTrades() {
+  const fS = $("tf-strat").value, fSide = $("tf-side").value, fOut = $("tf-out").value,
+        fState = $("tf-state").value, q = ($("tsearch").value || "").toLowerCase();
+  // strategy dropdown options (once populated)
+  const sel = $("tf-strat");
+  const strats = [...new Set(lastTrades.map(t => t.strategy))].sort();
+  if (sel.options.length - 1 !== strats.length)
+    sel.innerHTML = '<option value="">All strategies</option>' +
+      strats.map(s => `<option value="${s}">${STRAT_NAME[s] || s}</option>`).join("");
+
+  let rows = [...openPositionRows(), ...groupPositions(lastTrades)];
+  rows = rows.filter(r => {
+    if (fS && r.strategy !== fS) return false;
+    if (fSide && r.side !== fSide) return false;
+    if (fState === "open" && !r.open) return false;
+    if (fState === "closed" && r.open) return false;
+    if (fOut === "win" && !(r.net_pnl > 0)) return false;
+    if (fOut === "loss" && !(r.net_pnl <= 0)) return false;
+    if (q && !(`${r.strategy} ${r.side} ${r.reason}`.toLowerCase().includes(q))) return false;
+    return true;
+  });
+  rows.sort((a, b) => {
+    if (a.open !== b.open) return a.open ? -1 : 1;  // open always on top
+    const av = a[tSort.col] ?? 0, bv = b[tSort.col] ?? 0;
+    return (av > bv ? 1 : av < bv ? -1 : 0) * tSort.dir;
+  });
+
+  // summary strip over the (filtered) closed rows
+  const closed = rows.filter(r => !r.open);
+  const wins = closed.filter(r => r.net_pnl > 0);
+  const net = closed.reduce((s, r) => s + r.net_pnl, 0);
+  const gw = wins.reduce((s, r) => s + r.net_pnl, 0), gl = -closed.filter(r => r.net_pnl <= 0).reduce((s, r) => s + r.net_pnl, 0);
+  const chip = (l, v, kl="") => `<div class="chip"><div class="l">${l}</div><div class="v ${kl}">${v}</div></div>`;
+  $("tsum").innerHTML =
+    chip("Net P&L", signed(net), cls(net)) +
+    chip("Positions", closed.length + (rows.length-closed.length ? ` +${rows.length-closed.length} open` : "")) +
+    chip("Win rate", closed.length ? fmt(wins.length/closed.length*100,0)+"%" : "—") +
+    chip("Profit factor", gl>0 ? fmt(gw/gl,2) : "—") +
+    chip("Avg win", wins.length ? money(gw/wins.length) : "—", "up") +
+    chip("Avg loss", closed.length-wins.length ? money(-gl/(closed.length-wins.length)) : "—", "down");
+  $("tcount").textContent = `${rows.length} shown`;
+
+  const th = (col, label) => `<th data-sort="${col}">${label} ${tSort.col===col?`<span class="ar">${tSort.dir<0?"▼":"▲"}</span>`:""}</th>`;
+  const head = `<thead><tr>${th("exit_ts","Time")}<th>Strategy</th>${th("side","Side")}
+    <th>Lots</th>${th("entry_price","Entry")}<th>Exit</th>${th("exit_ts","Held")}
+    ${th("net_pnl","Net $")}<th>Net %</th><th>Lifecycle / trailing SL</th></tr></thead>`;
+  const body = rows.map(r => positionRow(r)).join("");
+  $("trades-table").innerHTML = rows.length
+    ? `<table id="rich-t">${head}<tbody>${body}</tbody></table>`
+    : '<div class="empty">No trades match these filters</div>';
+  $("trades-table").querySelectorAll("th[data-sort]").forEach(h => h.onclick = () => {
+    const c = h.dataset.sort;
+    if (tSort.col === c) tSort.dir *= -1; else { tSort.col = c; tSort.dir = -1; }
+    renderRichTrades();
+  });
+  $("trades-table").querySelectorAll("tr.pos-parent").forEach(tr => tr.onclick = () => {
+    const id = tr.dataset.pid;
+    if (tExpanded.has(id)) tExpanded.delete(id); else tExpanded.add(id);
+    renderRichTrades();
+  });
+}
+
+function positionRow(r) {
+  const src = r.source === "alpaca_paper" ? ' <span class="pill src-alpaca_paper">ALPACA</span>' : "";
+  if (r.open) {
+    return `<tr class="open-row">
+      <td>${dt(r.entry_ts)} <span class="up">● live</span></td>
+      <td style="text-align:left"><span class="pill ${r.strategy}">${STRAT_NAME[r.strategy]||r.strategy}</span> <span class="pill v">v${r.version??0}</span>${src}</td>
+      <td style="text-align:left"><span class="pill ${r.side}">${r.side}</span></td>
+      <td>${(+r.lots).toFixed(r.lots%1?1:0)}/${r.lots_total}</td>
+      <td>${fmt(r.entry_price)}</td><td class="ot-live num">${lastLast?fmt(lastLast):"—"}</td>
+      <td>${dur((Date.now()/1000)-r.entry_ts)}</td>
+      <td class="${cls(r.net_pnl)} ot-live">${signed(r.net_pnl)}</td><td class="flat">unreal.</td>
+      <td style="text-align:left"><span class="down">SL ${fmt(r.sl)}</span> / <span class="up">TP ${fmt(r.tp)}</span></td></tr>`;
+  }
+  const exp = tExpanded.has(r.id);
+  const last = r.fills[r.fills.length - 1];
+  const parent = `<tr class="pos-parent" data-pid="${r.id}">
+    <td>${dt(r.exit_ts)}</td>
+    <td style="text-align:left">${r.multi?`<span class="exp">${exp?"▾":"▸"}</span> `:""}<span class="pill ${r.strategy}">${STRAT_NAME[r.strategy]||r.strategy}</span> <span class="pill v">v${r.version??0}</span>${src}</td>
+    <td style="text-align:left"><span class="pill ${r.side}">${r.side}</span></td>
+    <td>${r.lots?(+r.lots).toFixed(r.lots%1?1:0):"—"}</td>
+    <td>${fmt(r.entry_price)}</td><td>${fmt(last.exit_price)}</td>
+    <td>${dur(r.exit_ts-r.entry_ts)}</td>
+    <td class="${cls(r.net_pnl)}" style="font-weight:600">${fmt(r.net_pnl)}</td>
+    <td class="${cls(r.net_pct)}">${fmt(r.net_pct,2)}%</td>
+    <td style="text-align:left;white-space:normal"><span class="pill gray">${r.multi?`${r.fills.length} fills · `:""}${last.reason_exit.replaceAll("_"," ")}</span></td></tr>`;
+  if (!r.multi || !exp) return parent;
+  const children = r.fills.map(f => `<tr class="fill-child">
+    <td>${new Date(f.exit_ts*1000).toLocaleTimeString("en-GB")}</td><td></td><td></td>
+    <td>${f.lots?(+f.lots).toFixed(f.lots%1?1:0):"—"}</td><td></td><td>${fmt(f.exit_price)}</td><td></td>
+    <td class="${cls(f.net_pnl)}">${fmt(f.net_pnl)}</td><td></td>
+    <td style="text-align:left;white-space:normal">${f.event||f.reason_exit.replaceAll("_"," ")}${f.sl_after?` · <span class="flat">SL ${fmt(f.sl_after)}</span>`:""}</td></tr>`).join("");
+  return parent + children;
+}
+["tsearch","tf-strat","tf-side","tf-out","tf-state"].forEach(id =>
+  $(id).addEventListener("input", renderRichTrades));
+
 let lastSignals = [], feedStrat = "all", feedEntriesOnly = false;
 function renderFeed() {
   const rows = lastSignals.filter(x =>
@@ -707,13 +872,12 @@ async function refresh() {
     </div>`;
   }).join("") : '<div class="empty" style="padding:14px">runner offline</div>';
 
-  /* trades tables + feed */
+  /* trades: mini on overview, rich consolidated view on Trades tab */
   const noTrades = '<div class="empty">No trades yet — lanes are observing the market…</div>';
   $("mini-trades").innerHTML = trades.length
     ? `<table>${tradeHead(false)}<tbody>${tradeRows(trades.slice(0, 8), false)}</tbody></table>` : noTrades;
-  $("trades-table").innerHTML = trades.length
-    ? `<table>${tradeHead(true)}<tbody>${tradeRows(trades, true)}</tbody></table>` : noTrades;
-  $("trades-count").textContent = trades.length ? `${trades.length} shown · newest first` : "";
+  lastTrades = trades; lastLanes = lanes; lastLast = live.last_price;
+  renderRichTrades();
   lastSignals = signals;
   renderFeed();
 
