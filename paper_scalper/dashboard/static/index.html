@@ -165,6 +165,7 @@ tr.pos-parent:hover { background: rgba(110,168,255,.06); }
 tr.pos-parent .exp { color: var(--faint); font-family: var(--mono); }
 tr.fill-child td { font-size: 11.5px; color: var(--muted); background: rgba(0,0,0,.15); }
 tr.fill-child td:first-child { padding-left: 28px; }
+.tt { font-size: 10.5px; color: var(--faint); font-family: var(--mono); }
 .pill.v { background: rgba(125,133,144,.10); color: var(--faint); padding: 2px 7px; }
 .tune-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; padding: 12px 16px 4px; }
 .tune-field label { display: block; font-size: 10.5px; color: var(--faint); font-weight: 600; margin-bottom: 4px; font-family: var(--mono); }
@@ -564,9 +565,10 @@ function renderRichTrades() {
   $("tcount").textContent = `${rows.length} shown`;
 
   const th = (col, label) => `<th data-sort="${col}">${label} ${tSort.col===col?`<span class="ar">${tSort.dir<0?"▼":"▲"}</span>`:""}</th>`;
-  const head = `<thead><tr>${th("exit_ts","Time")}<th>Strategy</th>${th("side","Side")}
-    <th>Lots</th>${th("entry_price","Entry")}<th>Exit</th>${th("exit_ts","Held")}
-    ${th("net_pnl","Net $")}<th>Net %</th><th>Lifecycle / trailing SL</th></tr></thead>`;
+  const head = `<thead><tr><th>Strategy</th>${th("side","Side")}<th>Lots</th>
+    ${th("entry_ts","Entry (time @ price)")}${th("exit_ts","Exit (time @ price)")}
+    ${th("exit_ts","Held")}${th("net_pnl","Net $")}<th>Net %</th>
+    <th>Lifecycle / trailing SL</th></tr></thead>`;
   const body = rows.map(r => positionRow(r)).join("");
   $("trades-table").innerHTML = rows.length
     ? `<table id="rich-t">${head}<tbody>${body}</tbody></table>`
@@ -583,36 +585,43 @@ function renderRichTrades() {
   });
 }
 
+// one record clubs entry (time @ price) and exit (time @ price) together
+const stamp = (when, price, extra="") => `<span class="tt">${when}</span><br>`
+  + `<span class="num">${price}</span>${extra}`;
+
 function positionRow(r) {
   const src = r.source === "alpaca_paper" ? ' <span class="pill src-alpaca_paper">ALPACA</span>' : "";
+  const stratCell = (caret="") => `<td style="text-align:left">${caret}<span class="pill ${r.strategy}">${STRAT_NAME[r.strategy]||r.strategy}</span> <span class="pill v">v${r.version??0}</span>${src}</td>`;
   if (r.open) {
     return `<tr class="open-row">
-      <td>${dt(r.entry_ts)} <span class="up">● live</span></td>
-      <td style="text-align:left"><span class="pill ${r.strategy}">${STRAT_NAME[r.strategy]||r.strategy}</span> <span class="pill v">v${r.version??0}</span>${src}</td>
+      ${stratCell()}
       <td style="text-align:left"><span class="pill ${r.side}">${r.side}</span></td>
       <td>${(+r.lots).toFixed(r.lots%1?1:0)}/${r.lots_total}</td>
-      <td>${fmt(r.entry_price)}</td><td class="ot-live num">${lastLast?fmt(lastLast):"—"}</td>
+      <td style="text-align:left">${stamp(dt(r.entry_ts), fmt(r.entry_price))}</td>
+      <td style="text-align:left">${stamp('<span class="up">● live</span>', `<span class="ot-live">${lastLast?fmt(lastLast):"—"}</span>`)}</td>
       <td>${dur((Date.now()/1000)-r.entry_ts)}</td>
       <td class="${cls(r.net_pnl)} ot-live">${signed(r.net_pnl)}</td><td class="flat">unreal.</td>
       <td style="text-align:left"><span class="down">SL ${fmt(r.sl)}</span> / <span class="up">TP ${fmt(r.tp)}</span></td></tr>`;
   }
   const exp = tExpanded.has(r.id);
   const last = r.fills[r.fills.length - 1];
+  const caret = r.multi ? `<span class="exp">${exp?"▾":"▸"}</span> ` : "";
   const parent = `<tr class="pos-parent" data-pid="${r.id}">
-    <td>${dt(r.exit_ts)}</td>
-    <td style="text-align:left">${r.multi?`<span class="exp">${exp?"▾":"▸"}</span> `:""}<span class="pill ${r.strategy}">${STRAT_NAME[r.strategy]||r.strategy}</span> <span class="pill v">v${r.version??0}</span>${src}</td>
+    ${stratCell(caret)}
     <td style="text-align:left"><span class="pill ${r.side}">${r.side}</span></td>
     <td>${r.lots?(+r.lots).toFixed(r.lots%1?1:0):"—"}</td>
-    <td>${fmt(r.entry_price)}</td><td>${fmt(last.exit_price)}</td>
+    <td style="text-align:left">${stamp(dt(r.entry_ts), fmt(r.entry_price))}</td>
+    <td style="text-align:left">${stamp(dt(r.exit_ts), fmt(last.exit_price))}</td>
     <td>${dur(r.exit_ts-r.entry_ts)}</td>
     <td class="${cls(r.net_pnl)}" style="font-weight:600">${fmt(r.net_pnl)}</td>
     <td class="${cls(r.net_pct)}">${fmt(r.net_pct,2)}%</td>
     <td style="text-align:left;white-space:normal"><span class="pill gray">${r.multi?`${r.fills.length} fills · `:""}${last.reason_exit.replaceAll("_"," ")}</span></td></tr>`;
   if (!r.multi || !exp) return parent;
   const children = r.fills.map(f => `<tr class="fill-child">
-    <td>${new Date(f.exit_ts*1000).toLocaleTimeString("en-GB")}</td><td></td><td></td>
-    <td>${f.lots?(+f.lots).toFixed(f.lots%1?1:0):"—"}</td><td></td><td>${fmt(f.exit_price)}</td><td></td>
-    <td class="${cls(f.net_pnl)}">${fmt(f.net_pnl)}</td><td></td>
+    <td style="text-align:left">↳ scale-out</td><td></td>
+    <td>${f.lots?(+f.lots).toFixed(f.lots%1?1:0):"—"}</td><td></td>
+    <td style="text-align:left">${stamp(new Date(f.exit_ts*1000).toLocaleTimeString("en-GB"), fmt(f.exit_price))}</td>
+    <td></td><td class="${cls(f.net_pnl)}">${fmt(f.net_pnl)}</td><td></td>
     <td style="text-align:left;white-space:normal">${f.event||f.reason_exit.replaceAll("_"," ")}${f.sl_after?` · <span class="flat">SL ${fmt(f.sl_after)}</span>`:""}</td></tr>`).join("");
   return parent + children;
 }
