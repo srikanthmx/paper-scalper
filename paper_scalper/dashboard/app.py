@@ -173,6 +173,58 @@ def save_params(body: ParamSave) -> dict:
         j.close()
 
 
+class LotSave(BaseModel):
+    strategy: str
+    lots_per_entry: int
+    lot_size_usd: float
+    scale_lots: str
+
+
+def _lot_defaults() -> dict:
+    return {"use_lots": _cfg.use_lots, "lots_per_entry": _cfg.lots_per_entry,
+            "lot_size_usd": _cfg.lot_size_usd, "scale_lots": _cfg.scale_lots}
+
+
+@app.get("/api/lots")
+def get_lots() -> dict:
+    """Per-strategy lot sizing — saved override merged onto config defaults.
+    The dashboard calculator and per-lane editor both read this."""
+    j = _journal()
+    try:
+        defaults = _lot_defaults()
+        out = {}
+        for name in STRATEGIES:
+            saved = j.get_state(f"lots:{name}") or {}
+            out[name] = {**defaults, **saved}
+        return {"defaults": defaults, "strategies": out}
+    finally:
+        j.close()
+
+
+@app.post("/api/lots")
+def save_lots(body: LotSave) -> dict:
+    """Save per-strategy lot sizing. The runner applies it on the next candle."""
+    if body.strategy not in STRATEGIES:
+        return {"error": f"unknown strategy {body.strategy}"}
+    if body.lots_per_entry < 1 or body.lot_size_usd < 1:
+        return {"error": "lots_per_entry and lot_size_usd must be >= 1"}
+    # scale_lots must parse to ints that don't exceed the entry size
+    try:
+        cuts = [int(x) for x in body.scale_lots.split(",") if x.strip()]
+    except ValueError:
+        return {"error": "scale_lots must be comma-separated integers, e.g. '2,1'"}
+    if sum(cuts) > body.lots_per_entry:
+        return {"error": "scale_lots cut more than lots_per_entry"}
+    j = _journal()
+    try:
+        cfg = {"use_lots": True, "lots_per_entry": body.lots_per_entry,
+               "lot_size_usd": body.lot_size_usd, "scale_lots": body.scale_lots}
+        j.set_state(f"lots:{body.strategy}", cfg)
+        return {"ok": True, "strategy": body.strategy, **cfg}
+    finally:
+        j.close()
+
+
 @app.get("/api/versions")
 def versions() -> list[dict]:
     """Per (strategy, version) performance — compare what each tweak did."""

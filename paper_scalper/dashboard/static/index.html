@@ -150,6 +150,24 @@ tbody tr:hover { background: rgba(110,168,255,.04); }
   border: 1px solid var(--border-soft); border-radius: 12px; padding: 9px 14px; }
 .tsum .chip .l { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); }
 .tsum .chip .v { font-family: var(--mono); font-size: 16px; font-weight: 600; }
+/* ───── lot sizing & margin widget ───── */
+.mlay { display: grid; grid-template-columns: 230px 230px 1fr; gap: 18px; padding: 14px 16px; }
+@media (max-width: 980px) { .mlay { grid-template-columns: 1fr; } }
+.mcol { display: flex; flex-direction: column; gap: 8px; }
+.msub { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); margin-bottom: 2px; }
+.mcol select, .mcol input { background: var(--panel-2); border: 1px solid var(--border);
+  color: var(--text); font: inherit; font-size: 12.5px; padding: 7px 10px; border-radius: 9px; width: 100%; }
+.mcol select:focus, .mcol input:focus { outline: none; border-color: var(--accent); }
+.mcol .tune-field label { display: block; font-size: 10.5px; color: var(--faint); font-weight: 600; margin-bottom: 4px; font-family: var(--mono); }
+.mout { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.mout .chip { background: linear-gradient(180deg, var(--panel-2), var(--panel));
+  border: 1px solid var(--border-soft); border-radius: 10px; padding: 8px 12px; min-width: 96px; }
+.mout .chip .l { font-size: 9.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--faint); }
+.mout .chip .v { font-family: var(--mono); font-size: 15px; font-weight: 600; }
+table.mtab { width: 100%; border-collapse: collapse; font-size: 12px; }
+table.mtab th, table.mtab td { padding: 6px 8px; text-align: right; border-bottom: 1px solid var(--border-soft); }
+table.mtab th { color: var(--faint); font-weight: 600; font-size: 10.5px; text-transform: uppercase; }
+table.mtab td.num { font-family: var(--mono); }
 .tbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; align-items: center; }
 .tbar input, .tbar select { background: var(--panel-2); border: 1px solid var(--border);
   color: var(--text); font: inherit; font-size: 12.5px; padding: 7px 10px; border-radius: 9px; }
@@ -319,8 +337,7 @@ footer { text-align: center; color: var(--faint); font-size: 11.5px; padding: 24
 <div class="bars-row">
   <nav>
     <button class="active" data-tab="overview">Overview</button>
-    <button data-tab="trades">Trades</button>
-    <button data-tab="reports">Reports</button>
+    <button data-tab="trades">Trades &amp; Reports</button>
     <button data-tab="tune">Tune</button>
     <button data-tab="research">Research</button>
   </nav>
@@ -380,8 +397,18 @@ footer { text-align: center; color: var(--faint); font-size: 11.5px; padding: 24
     </div>
   </section>
 
-  <!-- ════ TRADES (rich, consolidated) ════ -->
+  <!-- ════ TRADES & REPORTS (one consolidated analytics view) ════ -->
   <section class="tab" id="tab-trades">
+    <!-- headline numbers for the current scope -->
+    <div class="kpis" id="report-kpis"></div>
+
+    <!-- per-strategy comparison -->
+    <div class="card span12" style="margin-bottom:12px">
+      <div class="card-h">Strategy comparison <span class="hint">live, updates automatically</span></div>
+      <div style="overflow-x:auto" id="compare-table"></div>
+    </div>
+
+    <!-- the trades themselves: summary chips → filters → rich table -->
     <div class="tsum" id="tsum"></div>
     <div class="tbar">
       <input type="search" id="tsearch" placeholder="🔍 filter… (strategy, side, reason)">
@@ -391,20 +418,11 @@ footer { text-align: center; color: var(--faint); font-size: 11.5px; padding: 24
       <select id="tf-state"><option value="">Open &amp; closed</option><option value="open">Open only</option><option value="closed">Closed only</option></select>
       <span class="tbar-hint" id="tcount"></span>
     </div>
-    <div class="card span12">
+    <div class="card span12" style="margin-bottom:12px">
       <div style="overflow-x:auto" id="trades-table"></div>
     </div>
-  </section>
 
-  <!-- ════ REPORTS ════ -->
-  <section class="tab" id="tab-reports">
-    <div class="grid" style="margin-bottom:12px">
-      <div class="card span12">
-        <div class="card-h">Strategy comparison <span class="hint">live, updates automatically</span></div>
-        <div style="overflow-x:auto" id="compare-table"></div>
-      </div>
-    </div>
-    <div class="kpis" id="report-kpis"></div>
+    <!-- breakdowns that used to live on the Reports tab -->
     <div class="grid">
       <div class="card span6">
         <div class="card-h">Daily performance <span class="hint" id="daily-hint"></span></div>
@@ -427,6 +445,10 @@ footer { text-align: center; color: var(--faint); font-size: 11.5px; padding: 24
 
   <!-- ════ TUNE ════ -->
   <section class="tab" id="tab-tune">
+    <div class="card span12" id="margin-card" style="margin-bottom:12px">
+      <div class="card-h">Lot sizing &amp; margin <span class="hint">configure lots per strategy · see capital needed at leverage</span></div>
+      <div id="margin-box"></div>
+    </div>
     <div class="tune-layout">
       <div class="tune-side" id="tune-side"></div>
       <div>
@@ -506,6 +528,8 @@ function groupPositions(trades) {
       source: f0.source, entry_ts: f0.entry_ts, entry_price: f0.entry_price,
       exit_ts: fills[fills.length - 1].exit_ts, net_pnl: fills.reduce((s, f) => s + f.net_pnl, 0),
       lots: fills.reduce((s, f) => s + (+f.lots || 0), 0),
+      // margin = capital committed at entry = entry price × total qty across all fills
+      margin: f0.entry_price * fills.reduce((s, f) => s + (+f.qty || 0), 0),
       net_pct: fills.reduce((s, f) => s + (f.net_pnl_pct || 0), 0),
       reason: fills[fills.length - 1].reason_exit, multi: fills.length > 1,
     };
@@ -518,6 +542,7 @@ function openPositionRows() {
     return { id: "open-" + n, fills: [], open: true, strategy: n, version: l.version,
       side: p.side, source: l.source, entry_ts: p.entry_ts, entry_price: p.entry_price,
       exit_ts: null, net_pnl: l.unrealized || 0, lots: p.lots_remaining,
+      margin: p.entry_price * p.qty,
       lots_total: p.lots_total, sl: p.sl, tp: p.tp, reason: "open", multi: false };
   });
 }
@@ -565,7 +590,7 @@ function renderRichTrades() {
   $("tcount").textContent = `${rows.length} shown`;
 
   const th = (col, label) => `<th data-sort="${col}">${label} ${tSort.col===col?`<span class="ar">${tSort.dir<0?"▼":"▲"}</span>`:""}</th>`;
-  const head = `<thead><tr><th>Strategy</th>${th("side","Side")}<th>Lots</th>
+  const head = `<thead><tr><th>Strategy</th>${th("side","Side")}<th>Lots</th>${th("margin","Margin")}
     ${th("entry_ts","Entry (time @ price)")}${th("exit_ts","Exit (time @ price)")}
     ${th("exit_ts","Held")}${th("net_pnl","Net $")}<th>Net %</th>
     <th>Lifecycle / trailing SL</th></tr></thead>`;
@@ -597,6 +622,7 @@ function positionRow(r) {
       ${stratCell()}
       <td style="text-align:left"><span class="pill ${r.side}">${r.side}</span></td>
       <td>${(+r.lots).toFixed(r.lots%1?1:0)}/${r.lots_total}</td>
+      <td class="num">${money(r.margin)}</td>
       <td style="text-align:left">${stamp(dt(r.entry_ts), fmt(r.entry_price))}</td>
       <td style="text-align:left">${stamp('<span class="up">● live</span>', `<span class="ot-live">${lastLast?fmt(lastLast):"—"}</span>`)}</td>
       <td>${dur((Date.now()/1000)-r.entry_ts)}</td>
@@ -610,6 +636,7 @@ function positionRow(r) {
     ${stratCell(caret)}
     <td style="text-align:left"><span class="pill ${r.side}">${r.side}</span></td>
     <td>${r.lots?(+r.lots).toFixed(r.lots%1?1:0):"—"}</td>
+    <td class="num">${money(r.margin)}</td>
     <td style="text-align:left">${stamp(dt(r.entry_ts), fmt(r.entry_price))}</td>
     <td style="text-align:left">${stamp(dt(r.exit_ts), fmt(last.exit_price))}</td>
     <td>${dur(r.exit_ts-r.entry_ts)}</td>
@@ -619,7 +646,8 @@ function positionRow(r) {
   if (!r.multi || !exp) return parent;
   const children = r.fills.map(f => `<tr class="fill-child">
     <td style="text-align:left">↳ scale-out</td><td></td>
-    <td>${f.lots?(+f.lots).toFixed(f.lots%1?1:0):"—"}</td><td></td>
+    <td>${f.lots?(+f.lots).toFixed(f.lots%1?1:0):"—"}</td>
+    <td class="num">${money(f.entry_price * (+f.qty || 0))}</td><td></td>
     <td style="text-align:left">${stamp(new Date(f.exit_ts*1000).toLocaleTimeString("en-GB"), fmt(f.exit_price))}</td>
     <td></td><td class="${cls(f.net_pnl)}">${fmt(f.net_pnl)}</td><td></td>
     <td style="text-align:left;white-space:normal">${f.event||f.reason_exit.replaceAll("_"," ")}${f.sl_after?` · <span class="flat">SL ${fmt(f.sl_after)}</span>`:""}</td></tr>`).join("");
@@ -1177,6 +1205,92 @@ document.querySelector('nav button[data-tab="research"]').addEventListener("clic
 setInterval(() => {
   if (document.querySelector("#tab-research").classList.contains("active")) loadResearch();
 }, 5000);
+
+/* ── Lot sizing & margin calculator (Trades tab) ── */
+let marginData = null, mSel = "trend";
+const LEVERAGES = [1, 5, 10, 20, 50, 100];
+const mc = (l, v, kl = "") => `<div class="chip"><div class="l">${l}</div><div class="v ${kl}">${v}</div></div>`;
+
+async function loadMargin() {
+  marginData = await fetch("/api/lots").then(r => r.json());
+  if (!marginData.strategies[mSel]) mSel = Object.keys(marginData.strategies)[0];
+  buildMargin();
+}
+
+function buildMargin() {
+  if (!marginData) return;
+  const s = marginData.strategies[mSel];
+  const opts = Object.keys(marginData.strategies)
+    .map(n => `<option value="${n}" ${n === mSel ? "selected" : ""}>${STRAT_NAME[n] || n}</option>`).join("");
+  const levOpts = LEVERAGES.map(l => `<option value="${l}" ${l === 10 ? "selected" : ""}>${l}×</option>`).join("");
+  const price = lastLast || 65000;
+  $("margin-box").innerHTML = `
+    <div class="mlay">
+      <div class="mcol">
+        <div class="msub">Lots — per strategy</div>
+        <select id="m-strat">${opts}</select>
+        <div class="tune-field"><label>Lots per entry</label><input id="m-lots" type="number" min="1" step="1" value="${s.lots_per_entry}"></div>
+        <div class="tune-field"><label>Lot size — USD notional</label><input id="m-size" type="number" min="1" step="10" value="${s.lot_size_usd}"></div>
+        <div class="tune-field"><label>Scale-out lots (TP1,TP2,…)</label><input id="m-scale" type="text" value="${s.scale_lots}"></div>
+        <div class="tune-actions" style="display:flex;gap:10px;align-items:center;margin-top:2px">
+          <button class="btn" id="m-save">Save lots</button><span class="save-msg" id="m-msg"></span></div>
+      </div>
+      <div class="mcol">
+        <div class="msub">Calculator</div>
+        <div class="tune-field"><label>BTC price — USD</label><input id="m-price" type="number" step="1" value="${Math.round(price)}"></div>
+        <div class="tune-field"><label>Leverage</label><select id="m-lev">${levOpts}</select></div>
+        <div id="m-out" class="mout"></div>
+      </div>
+      <div class="mcol mgrow">
+        <div class="msub">Capital needed across leverage <span style="color:var(--faint);font-weight:500;text-transform:none">— notional = lots × lot size</span></div>
+        <div id="m-table"></div>
+      </div>
+    </div>`;
+  $("m-strat").onchange = e => { mSel = e.target.value; buildMargin(); };
+  ["m-lots", "m-size", "m-scale", "m-price"].forEach(id => $(id).addEventListener("input", computeMargin));
+  $("m-lev").addEventListener("change", computeMargin);
+  $("m-save").onclick = saveMargin;
+  computeMargin();
+}
+
+function computeMargin() {
+  if (!marginData) return;
+  const lots = Math.max(1, +$("m-lots").value || 1);
+  const size = Math.max(1, +$("m-size").value || 1);
+  const price = +$("m-price").value || 0;
+  const lev = +$("m-lev").value || 1;
+  const notional = lots * size, qty = price ? notional / price : 0;
+  $("m-out").innerHTML =
+    mc("Position notional", money(notional)) +
+    mc("BTC quantity", qty ? qty.toFixed(6) : "—") +
+    mc(`Capital @ ${lev}×`, money(notional / lev), "up") +
+    mc("Per-lot margin", money(size / lev)) +
+    mc("Liquidation move", "~" + (100 / lev).toFixed(lev > 20 ? 2 : 1) + "%", "down");
+  const rows = Object.entries(marginData.strategies).map(([n, st]) => {
+    const not = st.lots_per_entry * st.lot_size_usd;
+    return `<tr><td style="text-align:left"><span class="pill ${n}">${STRAT_NAME[n] || n}</span></td>
+      <td class="num">${st.lots_per_entry} × ${money(st.lot_size_usd)}</td><td class="num">${money(not)}</td>
+      ${LEVERAGES.map(l => `<td class="num">${money(not / l)}</td>`).join("")}</tr>`;
+  }).join("");
+  $("m-table").innerHTML = `<div style="overflow-x:auto"><table class="mtab"><thead><tr>
+    <th style="text-align:left">Strategy</th><th>Lots</th><th>Notional</th>
+    ${LEVERAGES.map(l => `<th>${l}×</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+async function saveMargin() {
+  const body = { strategy: mSel, lots_per_entry: +$("m-lots").value,
+    lot_size_usd: +$("m-size").value, scale_lots: ($("m-scale").value || "").trim() };
+  const msg = $("m-msg");
+  const res = await fetch("/api/lots", { method: "POST",
+    headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then(r => r.json());
+  if (res.error) { msg.textContent = "✗ " + res.error; msg.className = "save-msg down"; return; }
+  msg.textContent = "✓ saved — runner applies on the next candle"; msg.className = "save-msg up";
+  marginData.strategies[mSel] = { ...marginData.strategies[mSel], use_lots: true,
+    lots_per_entry: body.lots_per_entry, lot_size_usd: body.lot_size_usd, scale_lots: body.scale_lots };
+  computeMargin();
+}
+document.querySelector('nav button[data-tab="tune"]').addEventListener("click", loadMargin);
+loadMargin();
 
 refresh();
 setInterval(refresh, 2000);

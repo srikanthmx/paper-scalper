@@ -116,6 +116,7 @@ class Engine:
         self._gap_skip = False  # block new entries on the tick right after a feed gap
         for lane in self.lanes:
             self._sync_params(lane, bootstrap=True)
+            self._sync_lots(lane)
         self._warmup_from_history()
 
     def _warmup_from_history(self) -> None:
@@ -169,6 +170,12 @@ class Engine:
             lane.version = state["version"]
             log.info("[%s] params v%d applied: %s", lane.name, lane.version,
                      state["params"])
+
+    def _sync_lots(self, lane: Lane) -> None:
+        """Apply dashboard-saved per-lane lot sizing (lots:<strategy> state)."""
+        cfg_lots = self.journal.get_state(f"lots:{lane.name}")
+        if cfg_lots and hasattr(lane.broker, "set_lots"):
+            lane.broker.set_lots(**cfg_lots)
 
     def on_event(self, event: Trade | Quote) -> None:
         # Detect a feed gap (e.g. websocket reconnect): price may have jumped while
@@ -237,6 +244,7 @@ class Engine:
     def _on_candle_closed(self, candle: Candle, lanes: list[Lane]) -> None:
         for lane in lanes:
             self._sync_params(lane)
+            self._sync_lots(lane)
             lane.risk.on_candle()
             result = lane.strategy.on_candle(candle, self.last_quote)
             snap = lane.strategy.snapshot

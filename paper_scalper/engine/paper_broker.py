@@ -94,6 +94,24 @@ class PaperBroker:
     def __init__(self, cfg: Settings) -> None:
         self.cfg = cfg
         self.position: Position | None = None
+        # lot sizing is per-broker so each lane can be tuned independently from the
+        # dashboard; defaults come from cfg, overridden live via set_lots().
+        self.use_lots = cfg.use_lots
+        self.lots_per_entry = cfg.lots_per_entry
+        self.lot_size_usd = cfg.lot_size_usd
+        self.scale_lots = cfg.scale_lots
+
+    def set_lots(self, *, use_lots: bool | None = None, lots_per_entry: int | None = None,
+                 lot_size_usd: float | None = None, scale_lots: str | None = None) -> None:
+        """Override this lane's lot sizing (from the dashboard). Ignores None fields."""
+        if use_lots is not None:
+            self.use_lots = bool(use_lots)
+        if lots_per_entry is not None:
+            self.lots_per_entry = max(1, int(lots_per_entry))
+        if lot_size_usd is not None:
+            self.lot_size_usd = max(1.0, float(lot_size_usd))
+        if scale_lots is not None:
+            self.scale_lots = scale_lots
 
     def _fee(self, price: float, qty: float) -> float:
         return price * qty * self.cfg.fee_bps / 10_000
@@ -112,11 +130,11 @@ class PaperBroker:
         sign = 1.0 if signal.side == "long" else -1.0
         mid = quote.mid
         # lot mode: fixed lots of fixed notional; ignore the continuous qty.
-        if self.cfg.use_lots:
-            lots_total = self.cfg.lots_per_entry
-            lot_qty = self.cfg.lot_size_usd / fill
+        if self.use_lots:
+            lots_total = self.lots_per_entry
+            lot_qty = self.lot_size_usd / fill
             qty = lots_total * lot_qty
-            scale_lots = _parse_lots(self.cfg.scale_lots)
+            scale_lots = _parse_lots(self.scale_lots)
         else:
             lots_total, lot_qty, scale_lots = 1, qty, ()
         self.position = Position(
@@ -170,7 +188,7 @@ class PaperBroker:
             pos.sl_price = pos.mid_ref + sign * (pos.tp_hits - 1) * step
             pos.tp_price = pos.mid_ref + sign * (pos.tp_hits + 1) * step
             sl_label = "entry" if pos.tp_hits == 1 else f"+{pos.tp_hits - 1}R rung"
-            if not self.cfg.use_lots:
+            if not self.use_lots:
                 # continuous mode (backtests): bank scale_out_frac of the remainder
                 return self._close_fraction(quote, pos.scale_out_frac, "partial_tp",
                                             f"TP{pos.tp_hits}, SL→{sl_label}")
