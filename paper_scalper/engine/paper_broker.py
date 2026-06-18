@@ -122,21 +122,29 @@ class PaperBroker:
         worse_for_buy = (side == "long") == entering
         return price + slip if worse_for_buy else price - slip
 
+    def _fill_order(self, side: Side, entering: bool, raw: float, qty: float) -> float:
+        """Return the executed fill price for `qty` at the visible price `raw`.
+        In-app: apply modeled slippage. The Alpaca executor overrides this to place
+        a real market order and return the actual fill — that is the ONLY difference
+        between in-app and Alpaca paper; all entry/exit/ladder logic is shared here."""
+        return self._slip(raw, side, entering)
+
     def open_position(self, signal: Signal, quote: Quote, qty: float) -> Position:
         if self.position is not None:
             raise RuntimeError("position already open")
         raw = quote.ask if signal.side == "long" else quote.bid
-        fill = self._slip(raw, signal.side, entering=True)
         sign = 1.0 if signal.side == "long" else -1.0
         mid = quote.mid
-        # lot mode: fixed lots of fixed notional; ignore the continuous qty.
+        # lot mode: fixed lots of fixed notional; ignore the continuous qty. Size off
+        # the visible price, then take the fill (so real slippage lands in entry_price).
         if self.use_lots:
             lots_total = self.lots_per_entry
-            lot_qty = self.lot_size_usd / fill
+            lot_qty = self.lot_size_usd / raw
             qty = lots_total * lot_qty
             scale_lots = _parse_lots(self.scale_lots)
         else:
             lots_total, lot_qty, scale_lots = 1, qty, ()
+        fill = self._fill_order(signal.side, True, raw, qty)
         self.position = Position(
             side=signal.side, qty=qty, entry_ts=quote.ts, entry_price=fill,
             sl_price=mid * (1 - sign * signal.sl_pct / 100),
@@ -215,8 +223,8 @@ class PaperBroker:
         pos = self.position
         assert pos is not None
         raw = quote.bid if pos.side == "long" else quote.ask
-        fill = self._slip(raw, pos.side, entering=False)
         close_qty = pos.qty * frac
+        fill = self._fill_order(pos.side, False, raw, close_qty)
         entry_fee_part = pos.entry_fee * frac
         exit_fee = self._fee(fill, close_qty)
         sign = 1.0 if pos.side == "long" else -1.0
@@ -237,8 +245,8 @@ class PaperBroker:
         pos = self.position
         assert pos is not None
         raw = quote.bid if pos.side == "long" else quote.ask
-        fill = self._slip(raw, pos.side, entering=False)
         close_qty = lots * pos.lot_qty
+        fill = self._fill_order(pos.side, False, raw, close_qty)
         frac = close_qty / pos.qty if pos.qty else 0.0
         entry_fee_part = pos.entry_fee * frac
         exit_fee = self._fee(fill, close_qty)
@@ -266,7 +274,7 @@ class PaperBroker:
 
     def _final_close(self, pos: Position, quote: Quote, reason: str) -> ClosedTrade:
         raw = quote.bid if pos.side == "long" else quote.ask
-        fill = self._slip(raw, pos.side, entering=False)
+        fill = self._fill_order(pos.side, False, raw, pos.qty)
         exit_fee = self._fee(fill, pos.qty)
         sign = 1.0 if pos.side == "long" else -1.0
         gross = sign * (fill - pos.entry_price) * pos.qty

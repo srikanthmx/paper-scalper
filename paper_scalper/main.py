@@ -394,6 +394,19 @@ async def run(feed_name: str, cfg: Settings, only: str | None = None) -> None:
     else:
         raise SystemExit(f"unknown feed: {feed_name}")
 
+    # when a lane is routed to Alpaca paper, verify the sandbox is reachable + ACTIVE
+    # before we start — fail loudly rather than silently modelling every fill.
+    if cfg.execution_mode == "alpaca_paper":
+        plat = next((l for l in engine.lanes if l.source == "alpaca_paper"), None)
+        if plat is None:
+            log.warning("execution_mode=alpaca_paper but platform_lane '%s' is not in the "
+                        "running lanes — nothing is routed to Alpaca", cfg.platform_lane)
+        elif not plat.broker.account_ok():
+            raise SystemExit("Alpaca paper account not reachable/ACTIVE — check keys in .env")
+        else:
+            log.info("Alpaca PAPER execution armed for lane '%s' (real sandbox fills)",
+                     plat.name)
+
     log.info("paper trading %s | lanes=%s candle=%ss fee=%.0fbps slip=%.0fbps equity=%.2f/lane",
              cfg.symbol, [l.name for l in engine.lanes], cfg.candle_seconds, cfg.fee_bps,
              cfg.slippage_bps, cfg.starting_equity)
